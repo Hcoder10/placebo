@@ -159,22 +159,32 @@ async function main(): Promise<void> {
 
   process.stdout.write(`\n  request: ${request}\n  model:   ${MODEL}\n  session: ${session.id}\n\n`);
 
-  const stream = await client.sessions.createTurnStream(session.id, {
+  // Non-streaming, deliberately.
+  //
+  // vLLM's STREAMING Harmony parser mis-assembles this model's tool-call
+  // header whenever it answers on the `commentary` channel: the channel marker
+  // ends up inside the function name, so the harness receives
+  //
+  //     Tool call_tool<|channel|>commentary not found in tool mapping
+  //
+  // and every call is lost. The identical request parses correctly when it is
+  // not streamed -- the tokens are fine, the incremental assembly of them is
+  // not. Whether the model picks that channel varies with prompt length, which
+  // made this look like a prompt problem twice and cost two rounds of tuning
+  // the prompt to work around a parser.
+  //
+  // We give up live token output for a run that completes. That is a good
+  // trade: the interesting output of this program is what ends up in Studio.
+  const { data: turn } = await client.sessions.createTurn(session.id, {
     input: [{ type: 'user.message', content: `Build this game: ${request}` }] as never,
   });
 
-  let final = '';
-  for await (const { data } of stream.withMetadata()) {
-    const event = data as unknown as { type: string; content?: unknown; tool_calls?: unknown[] };
-
-    if (event.type === 'model.message') {
-      const calls = (event.tool_calls ?? []) as { tool_info?: { name?: string } }[];
-      for (const call of calls) {
-        const name = call.tool_info?.name;
-        if (name) process.stdout.write(`  -> ${name}\n`);
-      }
-      if (typeof event.content === 'string' && event.content) final = event.content;
-    }
+  const finished = turn as unknown as {
+    state?: { status?: string; message?: string; output?: { content?: string } };
+  };
+  const final = finished.state?.output?.content ?? '';
+  if (finished.state?.status && finished.state.status !== 'done') {
+    process.stdout.write(`  turn ${finished.state.status}: ${finished.state.message ?? ''}\n`);
   }
 
   const state = (await (await fetch(`${MCP_HOST}/api/state`)).json()) as {
