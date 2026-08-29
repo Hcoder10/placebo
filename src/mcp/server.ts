@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -416,9 +417,17 @@ app.post('/mcp', (req, res) => {
 
 app.use(express.json({ limit: '4mb' }));
 
-// The operator console: one static page, served from the same process that
-// holds the run state. No build step and no second port to explain during a demo.
-app.get('/', (_req, res) => {
+// The landing story and operator console share one visual shell. Generated
+// background films are intentionally static assets: live API data, copy,
+// controls, and approval gates remain accessible HTML above them.
+app.use('/assets', express.static(join(ROOT, 'console', 'assets'), { maxAge: '1y', immutable: true }));
+app.get('/styles.css', (_req, res) => {
+  res.sendFile(join(ROOT, 'console', 'styles.css'));
+});
+app.get('/app.js', (_req, res) => {
+  res.sendFile(join(ROOT, 'console', 'app.js'));
+});
+app.get(['/', '/console'], (_req, res) => {
   res.sendFile(join(ROOT, 'console', 'index.html'));
 });
 
@@ -457,6 +466,45 @@ app.get('/health', (_req, res) => {
  * the same view and a watcher cannot tell which is which — the console showed
  * ten branches from three different runs at one point.
  */
+// What the training loop has actually produced, read from disk each time so the
+// console shows the pipeline's real scale rather than a number baked in at
+// build. Everything here is a count of something the engine adjudicated.
+app.get('/api/training', (_req, res) => {
+  const dataDir = join(ROOT, 'data');
+  const countLines = (name: string): number => {
+    try {
+      return readFileSync(join(dataDir, name), 'utf8').split('\n').filter(Boolean).length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const corpus = countLines('corpus.jsonl');
+  let turns = 0;
+  let accepted = 0;
+  try {
+    for (const line of readFileSync(join(dataDir, 'corpus.jsonl'), 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      const row = JSON.parse(line) as { turn?: number; accepted?: boolean };
+      turns = Math.max(turns, row.turn ?? 0);
+      if (row.accepted) accepted += 1;
+    }
+  } catch {
+    // no corpus yet
+  }
+
+  res.json({
+    turns,
+    corpus,
+    accepted,
+    rejected: corpus - accepted,
+    preference_pairs: countLines('dpo.jsonl'),
+    supervised: countLines('sft.jsonl'),
+    curriculum_claims: countLines('curriculum.jsonl'),
+    draft_traces: countLines('draft-traces.jsonl'),
+  });
+});
+
 app.post('/api/reset', async (_req, res) => {
   for (const key of Object.keys(run.state.branches)) {
     delete run.state.branches[key];
@@ -524,6 +572,14 @@ app.get('/api/state', (_req, res) => {
 });
 
 const port = Number.parseInt(process.env.PLACEBO_MCP_PORT ?? '9400', 10);
-app.listen(port, '0.0.0.0', () => {
+const httpServer = app.listen(port, '0.0.0.0', () => {
   process.stdout.write(`placebo-tools on http://0.0.0.0:${String(port)}/mcp (contract ${contract.id})\n`);
 });
+
+// Keep an explicit reference to the listener. Besides making shutdown and
+// startup failures observable, this prevents launchers from treating the
+// completed module evaluation as a finished one-shot script.
+httpServer.on('error', (error: NodeJS.ErrnoException) => {
+  process.stderr.write(`placebo-tools failed to listen on ${String(port)}: ${error.message}\n`);
+});
+httpServer.ref();
