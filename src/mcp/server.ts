@@ -287,25 +287,33 @@ function buildServer(): McpServer {
     },
     async () => {
       const report = await inspectDesign(await session(), authoring.root);
+
+      // Deliberately terse, and the reason is measured rather than stylistic.
+      //
+      // The full report -- every check, its note, and every finding -- ran to
+      // thousands of tokens on a 32-part scene, and the run it was feeding died
+      // with `Input length (18441) exceeds model's maximum context length
+      // (16384)`. A tool whose output cannot fit in the window it is being read
+      // in has not given the agent information, it has ended the episode.
+      //
+      // So: passing checks collapse to their names, only failures carry detail,
+      // and each finding becomes one line built from the `fix` -- the single
+      // field the agent can act on. Everything dropped is still available in
+      // full through the console.
+      const failing = report.checks.filter(check => !check.pass);
+      const FINDINGS_SHOWN = 3;
+
       return text({
         passed: report.passed,
         parts: report.parts,
         from_kit: report.kitParts,
         hand_rolled: report.handRolled,
-        checks: report.checks.map(check => ({
+        passing: report.checks.filter(check => check.pass).map(check => check.name),
+        failing: failing.map(check => ({
           check: check.name,
-          pass: check.pass,
-          inspected: check.inspected,
           note: check.note,
-          // `fix` is carried through verbatim: it is phrased as the change to
-          // make, which is the only part of a finding an agent can act on.
-          findings: check.findings.map(finding => ({
-            instance: finding.instance,
-            observed: finding.observed,
-            expected: finding.expected,
-            fix: finding.fix,
-          })),
-          omitted: check.omitted,
+          fix: check.findings.slice(0, FINDINGS_SHOWN).map(f => `${f.instance}: ${f.observed} -> ${f.fix}`),
+          more: Math.max(0, check.findings.length - FINDINGS_SHOWN) + check.omitted,
         })),
       });
     },

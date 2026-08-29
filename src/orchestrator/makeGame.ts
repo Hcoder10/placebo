@@ -105,7 +105,32 @@ async function main(): Promise<void> {
   const { data: session } = await client.sessions.create({
     agent: {
       spec: {
-        model: { name: MODEL },
+        model: {
+          name: MODEL,
+          // Every failure of this run so far has been a token-budget failure
+          // wearing a different hat, and all of them trace to how much this
+          // model thinks before it acts.
+          //
+          //   run 4: `Input length (18441) exceeds maximum (16384)`
+          //   run 5: `max_tokens breached` at 8192 output, having written the
+          //          tool call as markdown JSON instead of calling the tool
+          //
+          // `low` reasoning effort is the lever that addresses both: gpt-oss
+          // spends thousands of tokens deliberating by default, and on a task
+          // that is mostly "call the right tool with the right arguments" that
+          // deliberation is what overflows the window, not the work.
+          //
+          // temperature 0 for the second failure specifically. Format drift --
+          // describing a tool call rather than making one -- is a sampling
+          // accident, and there is no reason to sample here: we want the most
+          // likely tool call, not a creative one.
+          params: {
+            reasoningEffort: 'low',
+            temperature: 0,
+            maxTokens: 2048,
+            parallelToolCalls: false,
+          },
+        },
         instructions: INSTRUCTIONS,
         mcp_servers: [
           {
