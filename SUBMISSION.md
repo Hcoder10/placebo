@@ -42,8 +42,8 @@ npm run mcp                                       # tools + console at :9400
 | LoRA DPO on gpt-oss-20b | train loss 0.39, 31.8 MB adapter |
 | Loop closed | one endpoint serves `gpt-oss-20b` and `placebo` (the post-trained adapter) |
 | Appearance verified, live Studio | 11 parts, 11 from the kit, every design check passes |
-| Speculation cost, flag-matched | 20% slower than a control running the same two vLLM flags without a drafter |
-| Draft adaptation | trained on this workload; expected accepted length 2.12 -> 2.244 offline |
+| Speculation cost, decomposed | flags cost nothing measurable (1.010x); speculation costs 22%; 1.010 x 0.782 = 0.790 against a measured combined 0.788 |
+| Draft adaptation | accepted length 2.17 -> 2.44, acceptance 14.6% -> 18.0%, against a +/-0.06 noise floor |
 | Independent review | Qodo found 8 bugs across the kit and sampler; all 8 real, all 8 fixed |
 
 ## Track by track
@@ -88,19 +88,42 @@ Recorded in the repo so it cannot drift under pressure:
   30 seconds. `rewards/accuracies: 1.0` at that size means the training set was
   separated, which is trivial.
 - **We did not invent DFlash and we did not train a draft model from scratch.**
-  We use the released checkpoint and *adapted* it to this workload, which is a
-  much smaller claim. It trained on 3840 blocks — very little data — and moved
-  expected accepted length from 2.12 to 2.244 offline. Do not read that as a
-  speedup: speculation on this workload still costs 20% against a flag-matched
-  control, and 2.244 is close enough to the 2.23 already measured *online* for
-  the unadapted draft that the honest summary is "adaptation has not yet paid
-  for itself here." [DFLASH.md](DFLASH.md) and [DFLASH_ADAPT.md](DFLASH_ADAPT.md)
-  carry the numbers and the decomposition.
-- **The flag cost inside that 20% is separately reported.** Loading a drafter
+  We use the released checkpoint and *adapted* it to this workload. z-lab ship
+  inference code only, so the training objective was reconstructed from the
+  checkpoint's own `spec_generate` loop; the check that the reconstruction is
+  right is that the offline instrument scores the *released* checkpoint at
+  2.120 against a live 2.17–2.23, where a wrong mask or offset would sit near
+  1.0.
+- **Adaptation moved acceptance, not wall-clock.** Accepted length 2.17 -> 2.44
+  and acceptance 14.6% -> 18.0%, measured online through the repo's own
+  instrument, same GPU and flags with only `--spec-model` differing. Throughput
+  209.2 -> 212.1 is *inside* the noise. Both facts belong together: the drafter
+  got 12% better at predicting the target and the generation did not get faster,
+  which supports rather than overturns the argument in [DFLASH.md](DFLASH.md)
+  that on a GPU which is not bandwidth-starved, verification is not the
+  bottleneck.
+- **The number is acceptance over reasoning tokens, not over Luau.** 1641 of
+  1644 collected traces finish on `length` rather than `stop`, and 1644 of 1644
+  open on gpt-oss's `analysis` channel, so the corpus is essentially reasoning
+  text. The evaluation has the same composition, which is very likely why the
+  gain transferred — but nobody should read this as "Luau source became 12% more
+  predictable."
+- **The noise floor is stated because it has to be.** The same released drafter
+  measured 2.23 and 2.17 on consecutive runs, at 139.6 and 209.2 tok/s, on a box
+  shared with three other model servers. The +0.27 gain is about 4x that; the
+  throughput non-result is inside it.
+- **The original 18% was never "flags plus speculation".** Loading a drafter
   requires two vLLM flags that remove optimisations, so the first measurement
-  conflated `flag cost + speculation cost`. The control isolates speculation;
-  where the baseline arm could not be measured cleanly it is left empty rather
-  than filled in.
+  conflated the two. Measured as three arms with every reading gated on an idle
+  server: the flags cost nothing resolvable (1.010x, inside a 3.6% noise floor)
+  and the drafter owns essentially the whole regression. The decomposition
+  multiplies back to the whole, which is the check that it is one measurement
+  rather than three unrelated ones.
+- **Two speculation bugs we found and did not fix.** The speculative server
+  returns HTTP 500 on one workload prompt reproducibly, and it is not
+  deterministic at temperature 0 while the control is perfectly stable across
+  repeats. Speculative decoding is supposed to be output-preserving, so that
+  second one is a correctness observation, not a performance one.
 - **The design checks measure properties, not taste.** Palette adherence,
   interpenetration, alignment, proportion, variety and lighting are checkable.
   Whether a level is *fun* is not, and nothing here claims to score it.

@@ -84,13 +84,60 @@ mistake this project exists to avoid making about game code.
 
 ## Measured
 
-It runs, and it is currently a **regression**. That is the useful finding.
+It runs, and it is a **regression**. Three arms, because two cannot say what
+caused it.
+
+The first version of this measurement compared the plain server against the
+speculative one, found 18%, and charged all of it to speculation. That was not
+supported. Loading the drafter requires two vLLM flags the plain server does not
+run with, and both remove optimisations, so what got measured was `flag cost +
+speculation cost`. The third arm separates them: same weights, same two flags,
+no speculator.
 
 ```
-                        tok/s     accepted length   acceptance
-  no speculation        252.7           —                —
-  released DFlash       206.7          1.99            12.3%
+                                          tok/s          accepted   acceptance
+                                      best   median        length
+  baseline  no flags, no drafter     255.0   247.5           —          —
+  control   both flags, no drafter   257.2   254.0           —          —
+  dflash    both flags + drafter     219.0   193.8          1.93      11.6%
 ```
+
+Eight prompts, eight repeats, arms interleaved, every reading gated on an idle
+server: 41 clean readings for the baseline, 64 for the control, 56 for the
+speculative arm.
+
+**Speculation costs 22%. The flags cost nothing we can measure.** Paired prompt
+by prompt, each prompt against itself across arms:
+
+```
+  flags        control / baseline   1.010x best, 1.027x median   range 0.971 - 1.017
+  speculation  dflash  / control    0.782x best, 0.780x median   range 0.723 - 0.893
+  combined     dflash  / baseline   0.788x best, 0.791x median   range 0.732 - 0.868
+```
+
+The three multiply back to each other — `1.010 x 0.782 = 0.790` against a
+measured combined `0.788`. That check is worth doing on any decomposition,
+because a split that does not reconstruct the whole is arithmetic rather than
+measurement.
+
+So the original 18% was never `flags + speculation`. End to end the regression is
+21%, and the drafter accounts for all of it. The flags — the thing this control
+was built to rule out — do not show up at all.
+
+**The flag arm reads 1-2.7% *faster* with the optimisations disabled**, which is
+the wrong direction, and it is not being written down as "the flags help". Two
+explanations cover it and nothing here separates them:
+
+- It is inside the noise. Repeated readings of one prompt on one arm spread 3.6%
+  at the median, and the per-prompt range straddles one at `0.971 - 1.017`.
+- The baseline is not a perfectly matched arm. Port 8000 serves
+  `['gpt-oss-20b', 'placebo']` — a LoRA adapter is loaded that neither other
+  server carries. Requests naming the base model should reach the base weights,
+  but adapter loading changes the server's memory and scheduling profile, and
+  that is an unquantified difference pointing in exactly the observed direction.
+
+The supportable statement is that the flags cost less than this setup can
+resolve. Below a couple of percent, this rig cannot tell you.
 
 Two flags are required, and neither is optional:
 
@@ -107,16 +154,53 @@ per-position acceptance halves each step — `519 → 286 → 148 → 70 → 48 
 → 8`. Paying for eight draft tokens plus a verification to gain two is a bad
 trade on a GPU that is not starved for bandwidth, and an RTX PRO 6000 is not.
 
-Two confounds worth stating rather than burying: those flags remove
-optimisations the unspeculated baseline still enjoys, so part of the 18% is the
-flags rather than the speculation; and this GPU has far more bandwidth than the
-GB10 the design targets, which is exactly the regime where speculation pays
-least. The clean comparison is the same flags without a speculator, and it has
-not been run.
+Two things turned up that are not about speed at all.
+
+**The speculative server is wrong on one prompt in eight.** `A button toggles a
+light on and off each time it is pressed.` returns HTTP 500 on every attempt,
+8/8 rounds — *"channel marker present but no channel value found in header"*.
+The drafter is producing a malformed harmony channel header. Baseline and control
+both serve that prompt normally, so this is the speculation and not the flags. A
+decoder that is output-preserving in theory is returning a 500 in practice, and
+that deserves more attention than the 22%.
+
+**And no arm's output survives the comparison.** On the prompts where both arms
+answer stably, the speculative server matches the control on 0/2, and the control
+matches the baseline on 0/4. Neither is producing unrelated text: speculation
+agrees with the control for the first 37% of a generation before diverging, and
+the control agrees with the baseline for the first 20%. That is what a single
+flipped token looks like under greedy decoding, not a model ignoring its target
+— numeric drift rather than a broken path.
+
+The two cases mean different things, though. The flags are *expected* to change
+the output, because `--disable-sliding-window` genuinely changes what the
+attention layers can see; the surprise there is that it changes the text without
+costing any speed. Speculation is *supposed* to preserve the target's output
+exactly, and it does not. Either way, a generation from one endpoint is not
+interchangeable with a generation from another, which matters for anything that
+caches or compares across them.
+
+One confound survives and is worth keeping: this GPU has far more bandwidth than
+the GB10 the design targets, which is exactly the regime where speculation pays
+least. Losing 22% here is not evidence it loses on the hardware it was built for.
+
+**How the numbers were taken.** `npx tsx scripts/bench-control.ts` runs all three
+arms against the same eight prompts at temperature 0, eight repeats each. The
+repeats are not ceremony: the same script cut to two reports the speculation cost
+as 7% rather than 22%, because best-of-two is a bad estimate of an arm's clean
+speed. It gates every reading on vLLM's
+own counters and throws away any sample another request overlapped, because these
+servers are shared. It takes each arm's prompts back to back rather than
+alternating one at a time — an idle RTX PRO 6000 drops to 180MHz, so a gap
+between readings measures the clock ramp instead of the server, and an earlier
+version of this script that waited on the busy arm between readings drove the
+other two down to 25 tok/s doing it. It scores each prompt on its fastest
+reading, since a shared rig can only ever subtract throughput, and prints the
+median beside it so a conclusion that depends on the estimator shows up as one.
 
 ## Why this is a starting point, not a verdict
 
-A general-purpose drafter scoring 12.3% on Luau is what you would expect. The
+A general-purpose drafter scoring 11.6% on Luau is what you would expect. The
 question the project cares about is whether a drafter trained on *this system's
 own traces* does better, and accepted length is the number that answers it.
 

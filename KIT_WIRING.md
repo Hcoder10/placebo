@@ -146,8 +146,26 @@ cannot run into Luau's 200-local limit even when repeated.
 
 ## What I would not claim
 
-`variety` is the weakest of the seven checks and is flagged as such in the code: colour
+`variety` is the weakest of the eight checks and is flagged as such in the code: colour
 and size uniformity are gated independently, and a scene can legitimately be uniform on
-either axis. The other six are mechanical facts about the world. `no_interpenetration`
-excludes the ground plane on both sides of every pair, because a platform laid at ground
-level shares studs with the floor by construction.
+either axis. The other seven are mechanical facts about the world.
+
+`no_interpenetration` has two stated exclusions, both to keep it from firing on correct
+scenes:
+
+- The ground plane, on both sides of every pair, because a platform laid at ground level
+  shares studs with the floor by construction.
+- Parts rotated off the world axes. An axis-aligned bounding box is only the part itself
+  when the rotation is a signed permutation — identity or a multiple of a quarter turn —
+  and two *disjoint* parts at 45 degrees can share a bounding box. The check reports how
+  many parts it skipped in its `note` rather than guessing about them. Everything the kit
+  builds is axis-aligned, the yawed coin included, so nothing is skipped in a kit-built
+  scene. A proper oriented-box test would lift the restriction; an AABB test over rotated
+  parts would just produce confident false findings.
+
+`authored_content` fails a world containing nothing but the bootstrap ground plane. Every
+other check is a statement about parts, so without it a world with no parts satisfies all
+of them and an agent could clear the design gate by building nothing — the same hole
+`validate.ts` closes for contracts. The threshold is zero authored parts rather than some
+minimum part count: it rules out the vacuous case, which is what it can defend, and does
+not pretend to know how many parts a game ought to have.
