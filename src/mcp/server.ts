@@ -5,6 +5,7 @@ import express from 'express';
 import { z } from 'zod';
 
 import { loadContract } from '../verifier/contract.js';
+import { auditContract } from '../verifier/validate.js';
 import { evaluate } from '../verifier/effect.js';
 import { StudioSession } from '../verifier/studio.js';
 import { Run, scorePrediction } from './runstate.js';
@@ -173,6 +174,30 @@ function buildServer(): McpServer {
         prediction_invalid_keys: prediction.invalidKeys,
         prediction_missed: prediction.missed,
       });
+    },
+  );
+
+  server.registerTool(
+    'contract_audit',
+    {
+      title: 'Check whether a contract is worth anything',
+      description:
+        'Runs the contract against an empty implementation. A contract satisfied with no code at all describes the world rather than the code, and every patch would pass it. Required before a drafted contract is used.',
+      inputSchema: {
+        reference: z
+          .string()
+          .default('')
+          .describe('Optional implementation believed correct; the contract must accept it.'),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ reference }) => {
+      const audit = await auditContract({
+        session: await session(),
+        contract,
+        reference: reference || undefined,
+      });
+      return text(audit);
     },
   );
 
