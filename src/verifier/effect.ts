@@ -85,6 +85,12 @@ export async function evaluate(params: {
 
       // An effect must survive every control, so a patch cannot pass by beating
       // only the most permissive one.
+      //
+      // Agreement is on the (before, after) pair, not just the key. Two controls
+      // that both show "Coins moved" but disagree about the baseline do not
+      // establish a well-defined effect — keeping the key and taking the first
+      // control's values would silently report one arbitrary control's view as
+      // the causal effect.
       let common: Record<string, [unknown, unknown]> | null = null;
       for (const control of contract.controls) {
         const controlState = await runCondition(session, contract, patchLuau, control.steps, realization);
@@ -92,7 +98,12 @@ export async function evaluate(params: {
         common =
           common === null
             ? observed
-            : Object.fromEntries(Object.entries(common).filter(([key]) => key in observed));
+            : Object.fromEntries(
+                Object.entries(common).filter(
+                  ([key, pair]) =>
+                    key in observed && JSON.stringify(observed[key]) === JSON.stringify(pair),
+                ),
+              );
       }
       perRealization.push(common ?? {});
     }

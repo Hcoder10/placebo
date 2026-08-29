@@ -35,6 +35,12 @@ setup: |
   collect.Name = "Collect"
   collect.Parent = sandbox
 
+  -- Built here so the unrelated_signal control does not have to create it, and
+  -- therefore does not differ structurally from the treatment.
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
 # The intervention: the collect signal fires for this player, REALIZATION times.
 # Realizations >1 model a repeated/duplicated event, which is how debounce and
 # duplicate-listener bugs actually surface in production.
@@ -51,13 +57,16 @@ controls:
 
   # A real but irrelevant signal, so "did nothing" is distinguishable from
   # "responds to anything at all".
+  #
+  # The decoy event is built in setup, not here. A control that adds an instance
+  # mutates structure the treatment never touches, which shows up as a spurious
+  # effect; it only disappeared before because intersecting with the other
+  # control happened to filter it out. Controls must differ from the treatment
+  # in the interaction alone.
   - name: unrelated_signal
     steps: |
-      local decoy = Instance.new("BindableEvent")
-      decoy.Name = "Decoy"
-      decoy.Parent = sandbox
       for _ = 1, REALIZATION do
-        decoy:Fire("P1")
+        sandbox.Decoy:Fire("P1")
       end
 
 effects:
