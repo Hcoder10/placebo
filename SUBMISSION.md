@@ -19,13 +19,19 @@ A launch gate, a unit test, and a build-health check all accept that patch.
 ## What runs
 
 ```bash
-npm test                                          # 16 unit tests, no Studio
+npm test                                          # 94 unit tests, no Studio
 npm run verify                                    # 7 candidates vs live Studio
+npm run build:game                                # accrete verified mechanics into a game
+npm run playable                                  # attach the input device, then press F5
+npx tsx scripts/kit-demo.ts                       # build a styled level and check how it looks
 npx tsx src/verifier/taskCli.ts tasks/build_coin.yaml    # build from scratch
 npx tsx src/verifier/taskCli.ts tasks/extend_door.yaml   # extend without regressing
+npx tsx src/verifier/taskCli.ts tasks/repair_key.yaml    # repair a bug that hides from one contract
 npx tsx src/bright/cli.ts --break --repair        # scraper recovers from a redesign
 npx tsx src/bright/cli.ts --break --adjudicate    # engine rules on scraped claims
-npx tsx src/train/export.ts tasks/*.yaml          # export preference pairs
+npm run flywheel                                  # sample, adjudicate, grow the corpus
+npm run spec:measure                              # accepted length of the current drafter
+npm run make:game "<what the game should do>"     # agent authors the world and the mechanics
 npm run mcp                                       # tools + console at :9400
 ```
 
@@ -41,7 +47,9 @@ npm run mcp                                       # tools + console at :9400
 | Preference export | 25 pairs, 3 supervised examples, every label a measured causal difference |
 | LoRA DPO on gpt-oss-20b | train loss 0.39, 31.8 MB adapter |
 | Loop closed | one endpoint serves `gpt-oss-20b` and `placebo` (the post-trained adapter) |
-| Appearance verified, live Studio | 11 parts, 11 from the kit, every design check passes |
+| Appearance verified, live Studio | 11 parts, 11 from the kit, 8/8 design checks pass |
+| Playable | the verified mechanic and a physical trigger installed as Scripts; three collects score 1/2/3, the coin respawns, the door opens on the third |
+| Flywheel, turn 3 | corpus 18 -> 60, preference pairs 25 -> 76, 30/30 samples usable, one model-authored patch accepted |
 | Speculation cost, decomposed | flags cost nothing measurable (1.010x); speculation costs 22%; 1.010 x 0.782 = 0.790 against a measured combined 0.788 |
 | Draft adaptation | accepted length 2.17 -> 2.44, acceptance 14.6% -> 18.0%, against a +/-0.06 noise floor |
 | Independent review | Qodo found 8 bugs across the kit and sampler; all 8 real, all 8 fixed |
