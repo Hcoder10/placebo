@@ -53,7 +53,7 @@ state changes that.
 
 That is the whole idea. Everything below is what it cost to make it true.
 
-## Six things that were harder than the idea
+## Ten things that were harder than the idea
 
 ### 1. The harness doesn't start on Windows
 
@@ -174,6 +174,121 @@ handler had run.
 
 The first fix was `task.wait()` four times. Which is a guess.
 
+### 7. Four ways to measure a model's incompetence that measure your own
+
+The flywheel bootstrapped on hand-written candidates: one correct
+implementation and some plausible ways to get it wrong. That works exactly
+once. Turn one consumed all eighteen; turn two added nothing. So we started
+sampling candidates from the model itself.
+
+The first batch came back and the engine rejected twenty out of twenty. A
+clean, damning number about a small model's ability to write game code.
+
+It was a number about our extractor. gpt-oss answers on one Harmony channel
+and reasons on another, and when the answer channel was empty we fell back to
+the reasoning channel — so twenty English paragraphs *about* the coin mechanic
+were evaluated as if they were the coin mechanic. The answer channel was empty
+because the token budget was 400 and the model had spent all 400 thinking.
+`finish_reason: length`, every time.
+
+Three more of the same species surfaced once we started looking:
+
+- A failed HTTP request and an unusable answer shared one counter. A saturated
+  endpoint and an incapable model both drive yield to zero, and they have
+  opposite remedies.
+- Truncation shared a counter with unusable output, so "the budget was too
+  small" was recorded as "the model produced garbage."
+- The filter that rejected prose required the text to mention `sandbox` — which
+  silently discarded every sample that reached for `game:GetService` instead. A
+  real and instructive mistake, thrown away by the thing that was supposed to
+  be protecting the corpus.
+
+Each of these produces a plausible number. None of them produces a true one.
+The whole project exists because a passing test can mean nothing; it turns out
+a failing measurement can mean nothing in exactly the same way, and we wrote
+four of them before breakfast.
+
+### 8. We built a gate that everything passes, in the one place we weren't looking
+
+We handed the repository to Qodo. It came back with eight bugs. All eight were
+real. The first one was the one that mattered:
+
+> `analyzeParts` derives acceptance only from checks that all pass for an empty
+> or bootstrap-ground-only scene. A model can therefore call `world_build` with
+> no meaningful content and satisfy the new mandatory `design_check` gate.
+
+Acceptance was `checks.every(check => check.pass)`. Every check is vacuous on a
+world with nothing in it: the ground plane is excluded from the variety test,
+low part counts bypass variety findings, and none of the others have anything
+to look at. Build nothing, pass everything. A test in our own suite *codified*
+accepting a scene with zero parts.
+
+The part that stings is that this is the project's central idea. The contract
+auditor exists precisely to reject a specification that an empty implementation
+satisfies — run it against no code, and if the effects still appear, the
+contract describes the world rather than the code. We had that argument
+written down, implemented, and tested on the correctness side. Then we built a
+second gate for appearance and left the identical hole in it.
+
+Knowing the failure mode is not the same as recognising it. It helps to have
+something that has not spent a day being pleased with the idea.
+
+### 9. A contract can be well-formed, non-trivial, and still not say what you meant
+
+Qodo's second finding was subtler and took longer to accept.
+
+We had written a repair task: two chests, two keys, and a bug where any key
+opens every chest. The contract said KeyA must unlock ChestA, listed
+`ChestB.@Locked` under `non_effects`, and used two controls — one where nothing
+happens, one where the *other* key is used.
+
+It passes an implementation that opens ChestB on any key at all.
+
+`non_effects` is differential. A key is reported as collateral only when the
+treatment and a control disagree about it. Against `never_uses`, ChestB moves.
+Against `uses_other_key`, ChestB moves in both, so they agree. The two controls
+disagree with each other, and a key the controls disagree about is *dropped*
+rather than counted against the patch. The bug becomes invisible precisely
+because it is indiscriminate.
+
+The fix was two symmetric contracts, one per key, each with controls that never
+touch the other chest — so every wrong behaviour shows up as a real difference.
+Driven live afterwards, the buggy baseline is rejected from both sides with
+collateral on the opposite chest, and the correct fix is accepted by both.
+
+What is worth carrying: the original contract passed its own triviality audit
+and its own reference implementation. Every automatic check we had said it was
+fine. A specification can be well-formed, non-trivial, satisfiable, and still
+describe something other than what you wanted, and there is no mechanical test
+for that last part.
+
+### 10. Two rounds of prompt engineering to work around a parser
+
+The agent that builds a game from a request kept dying, and it kept dying
+differently. It blew the context window. It hit the output cap having written
+its tool call as markdown JSON instead of calling the tool. It guessed the name
+of an MCP server nobody had told it. It corrupted its own JSON escaping past a
+thousand characters of embedded Luau.
+
+Underneath two of those was one bug that had nothing to do with the model:
+
+```
+Tool call_tool<|channel|>commentary not found in tool mapping
+```
+
+vLLM's streaming Harmony parser assembles the channel marker into the function
+name. The same request, not streamed, returns a clean tool call in 121 tokens —
+verified directly against the endpoint. The tokens were always fine; the
+incremental assembly of them was not.
+
+It correlates with prompt length, because past some size the model starts
+answering on the `commentary` channel. So it looks exactly like a prompt
+problem, and we shortened the prompt twice to make it go away, and both times
+it came back. We were tuning a prompt to avoid a parser.
+
+There is a general lesson in there that is more annoying than profound: when a
+failure correlates with something you control, you will keep adjusting that
+thing. The correlation was real and the causation was somewhere else entirely.
 ## The part where we asked a different model to break it
 
 With a few hours left we ran the repo past OpenAI's Codex as an adversary, with
@@ -247,6 +362,27 @@ We also aren't claiming robustness to event ordering: our realizations vary
 repetition, which catches debounce and duplicate-listener bugs, and that is a
 different thing from scheduler nondeterminism. Saying so cost us a sentence and
 buys the rest of the post its credibility.
+
+And we are not claiming we made anything faster. We adapted the released DFlash
+drafter on the system's own traces and it worked on the metric it targets --
+accepted length 2.17 to 2.44, acceptance 14.6% to 18.0% -- measured against a
+noise floor we established by running the *same* released drafter twice and
+watching it return 2.23 and then 2.17. Throughput went 209.2 to 212.1, which is
+inside that noise. The drafter got twelve percent better at predicting the
+target and generation did not get faster, because on a GPU that is not
+bandwidth-starved, verification was never the bottleneck.
+
+It would be easy to report the first pair of numbers and stop. They are the ones
+that sound like a result. The second pair is what tells you whether the first
+pair bought anything, and on this hardware it did not.
+
+One more thing about that number, because it changes what it means: 1641 of the
+1644 traces we collected finish on `length` rather than `stop`, and every one of
+them opens on gpt-oss's `analysis` channel. The corpus is essentially reasoning
+text. So this is acceptance over the model's *thinking*, not over Luau source.
+The evaluation has the same composition, which is very likely why the gain
+transferred at all -- but nobody should read it as "game code became more
+predictable.
 
 ## The thing worth keeping
 
