@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "verify": "tsx src/verifier/cli.ts",
+    "build:game": "tsx src/verifier/buildGame.ts",
     "mcp": "tsx src/mcp/server.ts",
     "run:agent": "tsx src/orchestrator/main.ts",
     "probe:studio": "tsx scripts/probe-studio.ts",

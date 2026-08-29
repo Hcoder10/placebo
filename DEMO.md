@@ -71,6 +71,37 @@ door_opens_immediately REJECT   missing door_opens_at_three
 > bought off with a smaller patch. And the third is caught by the *control*: with
 > two collects the door is already open, so nothing is attributable to the third."
 
+## 2:20 — Watch a game get built
+
+```bash
+npm run build:game
+```
+
+Have Studio's viewport visible. Objects appear as it goes.
+
+> "Same machinery, run as a sequence. Each mechanic has to prove it caused its
+> own behaviour *and* keep everything built before it. Step two starts by
+> checking that the coin mechanic really does still work — the regression set is
+> verified, not assumed."
+
+```
+step 2  a door that opens on the third coin
+    must keep   coin_awards_once
+    baseline    verified
+    PASS  kept    coin_awards_once
+    PASS  gained  door_opens_at_three   caused Door.@Open false -> true
+```
+
+> "If a step broke an earlier mechanic, the build stops there rather than
+> shipping the regression."
+
+Say what it is, plainly:
+
+> "The implementations come from a candidate pool, not from a model free-writing
+> a game — the fan-out that would have a model propose them is built but isn't
+> running. What's doing the work here is the verifier deciding which candidate
+> earns its place, and that part is real."
+
 ## 2:40 — Where the data comes from
 
 ```bash

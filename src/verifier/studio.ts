@@ -263,6 +263,36 @@ return HttpService:JSONEncode({
     }
   }
 
+  /**
+   * Top-level names currently in the sandbox.
+   *
+   * Used to show what the build actually produced, rather than asserting it —
+   * the same instinct as everything else here.
+   */
+  async snapshotSandbox(): Promise<string[]> {
+    const raw = await this.luau(`
+local HttpService = game:GetService("HttpService")
+local root = workspace:FindFirstChild(${JSON.stringify(SANDBOX)})
+if not root then return "[]" end
+local names = {}
+for _, child in root:GetChildren() do
+	local label = child.ClassName .. "  " .. child.Name
+	for key, value in pairs(child:GetAttributes()) do
+		label = label .. "  [" .. key .. "=" .. tostring(value) .. "]"
+	end
+	table.insert(names, label)
+end
+table.sort(names)
+return HttpService:JSONEncode(names)
+`);
+    if (typeof raw !== 'string') return [];
+    try {
+      return JSON.parse(raw) as string[];
+    } catch {
+      return [];
+    }
+  }
+
   /** Leaves the place as we found it. */
   async cleanup(): Promise<void> {
     await this.luau(`
