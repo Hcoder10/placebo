@@ -9,7 +9,7 @@ import { auditContract } from '../verifier/validate.js';
 import { evaluate } from '../verifier/effect.js';
 import { StudioSession } from '../verifier/studio.js';
 import { inspectDesign } from '../verifier/design.js';
-import { KIT_BRIEF, KIT_LIGHTING_RESTORE_LUAU } from '../verifier/kit.js';
+import { KIT_LIGHTING_RESTORE_LUAU } from '../verifier/kit.js';
 import { Authoring } from './authoring.js';
 import { Run, scorePrediction } from './runstate.js';
 
@@ -200,9 +200,20 @@ function buildServer(): McpServer {
     'world_build',
     {
       title: 'Create objects in the game world',
+      // Deliberately short.
+      //
+      // KIT_BRIEF lives in the agent instructions, not here. Putting it in the
+      // tool schema was measurably worse: it enlarges the tool block sent on
+      // every turn, and with the bigger block this model started emitting its
+      // tool calls on the `commentary json` Harmony channel, which vLLM's
+      // STREAMING parser assembles into a function name of
+      // `call_toolcommentaryjson`. Every call then missed the tool mapping and
+      // the run stalled after five world steps. The same request parses
+      // perfectly non-streamed, so the bug is in streaming delta assembly --
+      // but the cheap and correct fix is to describe the tool here and teach
+      // the kit in the system prompt, which is where guidance belongs anyway.
       description:
-        'Runs Luau that creates or configures instances under the sandbox root. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.\n\n' +
-        KIT_BRIEF,
+        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` and `kit` are in scope. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
       inputSchema: {
         luau: z.string().describe('Luau that builds part of the world. `sandbox` is in scope.'),
       },

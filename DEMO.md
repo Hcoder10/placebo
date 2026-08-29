@@ -71,7 +71,54 @@ door_opens_immediately REJECT   missing door_opens_at_three
 > bought off with a smaller patch. And the third is caught by the *control*: with
 > two collects the door is already open, so nothing is attributable to the third."
 
-## 2:20 — Watch a game get built
+## 2:20 — It builds something worth looking at
+
+```bash
+npx tsx scripts/kit-demo.ts
+```
+
+Have Studio's viewport visible. A level appears in about ten seconds.
+
+> "Verified mechanics were not enough. Everything it built looked like grey
+> boxes, because a small model writing raw `Instance.new` gets exactly what that
+> returns — plastic, default grey, four by one by two, wherever it guessed."
+
+> "So we did the same thing to appearance that we did to correctness. We did not
+> ask the model to have taste. We gave it a substrate where the good outcome is
+> the default, and then we verified the properties that are actually checkable."
+
+Then run the checks over what just appeared:
+
+```
+  PlaceboKitDemo: 11 part(s), 11 from the kit, 0 hand-rolled
+  6 colour(s), 8 size(s), 10 height(s)
+  PASS  authored_content     (the world is not empty)
+  PASS  palette_adherence    (every visible part is one of the kit palette colours)
+  PASS  default_material_tell(no part is still wearing what Instance.new gave it)
+  PASS  grid_alignment       (positions sit on the 0.5-stud grid)
+  PASS  size_sanity          (no degenerate, absurd or sliver-thin parts)
+  PASS  no_interpenetration  (no part is buried inside another)
+  PASS  variety              (the scene is not one colour and one size)
+  PASS  scene_lighting       (the place is not on default Lighting)
+  design accepted
+```
+
+The one worth pointing at is the first:
+
+> "That check exists because Qodo found the hole. Acceptance was 'every check
+> passed', and every check passes vacuously on an empty world — so an agent
+> could satisfy the design gate by building nothing. It is the same failure the
+> contract auditor already guards against on the correctness side: a gate
+> everything passes is not a gate. We had closed that hole in one place and left
+> it open in the other."
+
+Be precise about the limit:
+
+> "These measure properties, not taste. Palette, geometry, proportion, lighting
+> — all checkable. Whether the level is *fun* is not, and we are not claiming a
+> number for it."
+
+## 2:35 — Watch a game get built
 
 ```bash
 npm run build:game

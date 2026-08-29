@@ -41,6 +41,10 @@ npm run mcp                                       # tools + console at :9400
 | Preference export | 25 pairs, 3 supervised examples, every label a measured causal difference |
 | LoRA DPO on gpt-oss-20b | train loss 0.39, 31.8 MB adapter |
 | Loop closed | one endpoint serves `gpt-oss-20b` and `placebo` (the post-trained adapter) |
+| Appearance verified, live Studio | 11 parts, 11 from the kit, every design check passes |
+| Speculation cost, flag-matched | 20% slower than a control running the same two vLLM flags without a drafter |
+| Draft adaptation | trained on this workload; expected accepted length 2.12 -> 2.244 offline |
+| Independent review | Qodo found 8 bugs across the kit and sampler; all 8 real, all 8 fixed |
 
 ## Track by track
 
@@ -83,10 +87,23 @@ Recorded in the repo so it cannot drift under pressure:
 - **The training run is a working pipeline, not a capability claim.** 25 pairs,
   30 seconds. `rewards/accuracies: 1.0` at that size means the training set was
   separated, which is trivial.
-- **We did not invent DFlash and did not train a draft model.** We use the
-  released checkpoint. [DFLASH.md](DFLASH.md) states the adaptation experiment,
-  its required ordering, and the control that would make the result meaningful —
-  and says plainly that it has not been run.
+- **We did not invent DFlash and we did not train a draft model from scratch.**
+  We use the released checkpoint and *adapted* it to this workload, which is a
+  much smaller claim. It trained on 3840 blocks — very little data — and moved
+  expected accepted length from 2.12 to 2.244 offline. Do not read that as a
+  speedup: speculation on this workload still costs 20% against a flag-matched
+  control, and 2.244 is close enough to the 2.23 already measured *online* for
+  the unadapted draft that the honest summary is "adaptation has not yet paid
+  for itself here." [DFLASH.md](DFLASH.md) and [DFLASH_ADAPT.md](DFLASH_ADAPT.md)
+  carry the numbers and the decomposition.
+- **The flag cost inside that 20% is separately reported.** Loading a drafter
+  requires two vLLM flags that remove optimisations, so the first measurement
+  conflated `flag cost + speculation cost`. The control isolates speculation;
+  where the baseline arm could not be measured cleanly it is left empty rather
+  than filled in.
+- **The design checks measure properties, not taste.** Palette adherence,
+  interpenetration, alignment, proportion, variety and lighting are checkable.
+  Whether a level is *fun* is not, and nothing here claims to score it.
 - **Matched controls in game-code training are not new.** [RELATED.md](RELATED.md)
   cites the prior work and states the actual difference: it varies the *verifier
   in the training loop*; we vary the *interaction inside a single evaluation*.
