@@ -210,6 +210,49 @@ whether a specific state change was caused by the player's action or was going t
 happen regardless. A launch gate accepts the reward hack in this repo; only a
 no-collect control rejects it.
 
+## Modes
+
+Three kinds of task, one mechanism. The only structural difference is which
+contracts must hold and what the agent starts from.
+
+```bash
+npx tsx src/verifier/taskCli.ts tasks/build_coin.yaml    # build from scratch
+npx tsx src/verifier/taskCli.ts tasks/extend_door.yaml   # add a feature, keep the old ones
+npm run verify                                            # repair a defect
+```
+
+`extend` is the interesting one. A candidate that adds a door while silently
+dropping the coin award reports `BROKE coin_awards_once` rather than scoring as a
+partial win, and ranking is lexicographic so a regression cannot be bought off
+with a smaller patch. A task must also *prove* its baseline satisfies what it
+claims before anything is scored against it.
+
+## Where the data comes from
+
+```bash
+npx tsx src/bright/cli.ts                        # scrape, extract, validate
+npx tsx src/bright/cli.ts --break                # simulate a site redesign
+npx tsx src/bright/cli.ts --break --repair       # recover fields by shape
+npx tsx src/bright/cli.ts --break --adjudicate   # let the engine rule on the claims
+```
+
+The scraper spec is a versioned file. When the page moves, fields are recovered
+by *shape* — each declares what a valid value looks like — with document order
+separating two fields that hold the same kind of value. The repair is written
+back with a bumped revision, so it arrives as a reviewable diff.
+
+Then the engine adjudicates. Of four scraped claims, three were wrong and were
+dropped for distinct reasons: an abstract class, a replacement that does not
+resolve, a deprecation that already completed. **The web proposes; the engine
+decides.**
+
+## Running it on one machine
+
+[DGX_SPARK.md](DGX_SPARK.md) works through serving, drafting and post-training
+co-resident in 128 GB of unified memory, and why a bandwidth-starved,
+compute-rich box is the case where speculative decoding stops being an
+optimisation and becomes the enabling technique.
+
 ## Layout
 
 ```
