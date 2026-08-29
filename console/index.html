@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Placebo — causal repair console</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #12161b;
+    --panel-2: #171c23;
+    --line: #232a33;
+    --text: #e6ebf2;
+    --muted: #8b97a8;
+    --accept: #3ddc91;
+    --reject: #ff6b6b;
+    --warn: #ffb454;
+    --accent: #6aa9ff;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .status {
+    font: 600 11px/1 var(--mono); letter-spacing: .8px; text-transform: uppercase;
+    padding: 5px 9px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted);
+  }
+  .status.running { color: var(--accent); border-color: #2b4a7a; }
+  .status.waiting { color: var(--warn); border-color: #5a4526; }
+  .status.done    { color: var(--accept); border-color: #22553f; }
+  .req { color: var(--muted); font-size: 13px; max-width: 78ch; }
+  main { padding: 20px 24px 60px; }
+  .meta { display: flex; gap: 20px; color: var(--muted); font: 12px/1 var(--mono); margin-bottom: 18px; flex-wrap: wrap; }
+  .meta b { color: var(--text); font-weight: 600; }
+
+  .approval {
+    background: #24190a; border: 1px solid #6b4c17; border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 20px;
+  }
+  .approval h2 { margin: 0 0 6px; font-size: 14px; color: var(--warn); }
+  .approval button {
+    font: 600 12px var(--mono); padding: 7px 14px; border-radius: 5px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text); margin-right: 8px;
+  }
+  .approval button.deny { border-color: #6b2b2b; color: var(--reject); }
+
+  h2.section { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 26px 0 10px; font-weight: 600; }
+
+  .branches { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .branch {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px;
+    cursor: pointer; transition: border-color .12s;
+  }
+  .branch:hover { border-color: #33404f; }
+  .branch.sel { border-color: var(--accent); }
+  .branch.accept { border-left: 3px solid var(--accept); }
+  .branch.reject { border-left: 3px solid var(--reject); }
+  .branch.pending { border-left: 3px solid var(--line); }
+  .branch h3 { margin: 0 0 8px; font: 600 13px var(--mono); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .verdict { font: 700 10px var(--mono); letter-spacing: .8px; padding: 3px 7px; border-radius: 3px; }
+  .verdict.accept { background: #10361f; color: var(--accept); }
+  .verdict.reject { background: #3a1a1a; color: var(--reject); }
+  .verdict.pending { background: var(--panel-2); color: var(--muted); }
+  .why { color: var(--muted); font-size: 12px; min-height: 34px; }
+  .chips { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .chip { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; }
+  .chip.bad { color: var(--warn); border-color: #5a4526; }
+  .chip.good { color: var(--accept); border-color: #22553f; }
+
+  .detail { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  table { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  td { padding: 6px 10px 6px 0; border-bottom: 1px solid #1a1f26; vertical-align: top; }
+  td.k { color: var(--muted); }
+  .ok { color: var(--accept); }
+  .no { color: var(--reject); }
+  pre { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-x: auto; font: 12px/1.5 var(--mono); color: #c6d0dc; margin: 8px 0 0; }
+  .empty { color: var(--muted); font-style: italic; padding: 30px 0; text-align: center; }
+  .inert { color: var(--warn); font: 12px var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Placebo <span>— causal repair console</span></h1>
+  <span id="status" class="status">idle</span>
+  <span id="headline" class="req"></span>
+</header>
+
+<main>
+  <div class="req" id="requirement"></div>
+  <div class="meta" id="meta"></div>
+
+  <div id="approval"></div>
+
+  <h2 class="section">Counterfactual branches</h2>
+  <div class="branches" id="branches"></div>
+
+  <div id="detail"></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let selected = null;
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function whyText(b) {
+  const v = b.verdict;
+  if (!v) return b.patchLuau ? 'patch proposed, awaiting verification' : 'waiting for a patch';
+  if (v.error) return 'error: ' + v.error.slice(0, 70);
+  if (v.inert) return 'no causal effect — state identical with and without the interaction';
+  const bits = [];
+  if (v.missing?.length) bits.push('missing ' + v.missing.join(', '));
+  if (v.collateral?.length) bits.push('moved ' + v.collateral.join(', '));
+  if (!bits.length) return 'caused every required effect, nothing else moved';
+  return bits.join('; ');
+}
+
+function render(s) {
+  $('status').textContent = s.status;
+  $('status').className = 'status ' + s.status;
+  $('headline').textContent = s.headline || '';
+  $('requirement').textContent = s.contract?.requirement || '';
+
+  $('meta').innerHTML = [
+    ['contract', s.contract?.id],
+    ['realizations', (s.contract?.realizations || []).join(', ')],
+    ['controls', (s.contract?.controls || []).join(', ')],
+    ['branches', Object.keys(s.branches || {}).length],
+  ].map(([k, v]) => `${k} <b>${esc(v ?? '-')}</b>`).join('');
+
+  // Approval gate — the irreversible step asks first.
+  const pending = Object.entries(s.pending || {});
+  $('approval').innerHTML = pending.length === 0 ? '' : pending.map(([id, p]) => `
+    <div class="approval">
+      <h2>Approval required — ${esc(p.tool)}</h2>
+      <div class="req">This step cannot be undone. Arguments: <code>${esc(JSON.stringify(p.args))}</code></div>
+      <div style="margin-top:10px">
+        <button onclick="decide('${esc(id)}','allow')">Approve</button>
+        <button class="deny" onclick="decide('${esc(id)}','deny')">Deny</button>
+      </div>
+    </div>`).join('');
+
+  const branches = Object.values(s.branches || {});
+  $('branches').innerHTML = branches.length === 0
+    ? '<div class="empty">No branches yet. The parent agent fans out subagents from one identical checkpoint.</div>'
+    : branches.map(b => {
+        const v = b.verdict;
+        const cls = !v ? 'pending' : v.accepted ? 'accept' : 'reject';
+        const label = !v ? 'PENDING' : v.accepted ? 'ACCEPT' : 'REJECT';
+        const pred = (s.predictions || {})[b.id];
+        return `
+          <div class="branch ${cls} ${selected === b.id ? 'sel' : ''}" onclick="select('${esc(b.id)}')">
+            <h3>${esc(b.id)}<span class="verdict ${cls}">${label}</span></h3>
+            <div class="why">${esc(whyText(b))}</div>
+            <div class="chips">
+              ${v ? `<span class="chip ${v.stable ? 'good' : 'bad'}">${v.stable ? 'stable' : 'timing-dependent'}</span>` : ''}
+              ${v ? `<span class="chip">${v.realizations} realizations</span>` : ''}
+              <span class="chip">${b.engineRuns} engine runs</span>
+              ${pred?.scored ? `<span class="chip ${pred.correct === pred.total ? 'good' : 'bad'}">prediction ${pred.correct}/${pred.total}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
+  const b = branches.find(x => x.id === selected);
+  $('detail').innerHTML = !b ? '' : detailHtml(b, (s.predictions || {})[b.id]);
+}
+
+function detailHtml(b, pred) {
+  const v = b.verdict;
+  const rows = v ? Object.entries(v.observed || {}) : [];
+
+  const predRows = b.prediction
+    ? Object.entries(b.prediction.effects).map(([k, want]) => {
+        const got = v?.observed?.[k];
+        const ok = got !== undefined;
+        return `<tr><td class="k">${esc(k)}</td><td>${esc(want)}</td>
+                <td class="${ok ? 'ok' : 'no'}">${esc(got ?? 'no change')}</td></tr>`;
+      }).join('')
+    : '';
+
+  return `
+    <div class="detail">
+      <h2 class="section" style="margin-top:0">${esc(b.id)} — what the engine observed</h2>
+      ${v?.inert ? '<div class="inert">Treatment and control produced identical state. Whatever this patch does, the interaction did not cause it.</div>' : ''}
+      ${rows.length ? `<table><tr><th>state key</th><th>control &rarr; treatment</th></tr>
+        ${rows.map(([k, val]) => `<tr><td class="k">${esc(k)}</td><td>${esc(val)}</td></tr>`).join('')}</table>`
+        : (v ? '' : '<div class="empty">Not verified yet.</div>')}
+
+      ${b.prediction ? `<h2 class="section">Predicted vs observed</h2>
+        <table><tr><th>key</th><th>agent predicted</th><th>engine observed</th></tr>${predRows}</table>
+        ${pred?.wrong?.length ? `<div class="chips">${pred.wrong.map(w => `<span class="chip bad">${esc(w)}</span>`).join('')}</div>` : ''}` : ''}
+
+      ${b.patchLuau ? `<h2 class="section">Patch</h2><pre>${esc(b.patchLuau.trim())}</pre>` : ''}
+    </div>`;
+}
+
+function select(id) { selected = selected === id ? null : id; poll(); }
+
+async function decide(id, status) {
+  await fetch('/api/approvals/' + encodeURIComponent(id), {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  poll();
+}
+
+async function poll() {
+  try {
+    const s = await (await fetch('/api/state')).json();
+    render(s);
+  } catch (e) { /* server restarting; next tick retries */ }
+}
+
+poll();
+setInterval(poll, 700);
+</script>
+</body>
+</html>

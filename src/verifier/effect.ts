@@ -25,6 +25,15 @@ export interface Verdict {
   collateral: string[];
   /** What the treatment changed relative to control, for display. */
   observed: Record<string, string>;
+  /**
+   * The same diff for every realization.
+   *
+   * A prediction judged against realization 1 alone lets a timing-dependent
+   * patch look well-understood: "missing debounce" awards exactly +1 the first
+   * time and only misbehaves under repetition. Scoring across all of them holds
+   * a prediction to the same standard as a required effect.
+   */
+  observedAll: Record<string, string>[];
   /** True when the treatment changed nothing at all — the reward-hack signature. */
   inert: boolean;
   realizations: number;
@@ -94,6 +103,7 @@ export async function evaluate(params: {
       missing: contract.effects.map(effect => effect.key),
       collateral: [],
       observed: {},
+      observedAll: [],
       inert: false,
       realizations: 0,
       stable: false,
@@ -135,14 +145,20 @@ export async function evaluate(params: {
     satisfied,
     missing,
     collateral,
-    observed: Object.fromEntries(
-      Object.entries(first).map(([key, [before, after]]) => [
-        key,
-        `${JSON.stringify(before)} -> ${JSON.stringify(after)}`,
-      ]),
-    ),
+    observed: renderDiff(first),
+    observedAll: perRealization.map(renderDiff),
     inert: perRealization.every(observed => Object.keys(observed).length === 0),
     realizations: perRealization.length,
     stable: signatures.size === 1,
   };
+}
+
+/** Human- and comparison-friendly rendering of one realization's diff. */
+function renderDiff(observed: Record<string, [unknown, unknown]>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(observed).map(([key, [before, after]]) => [
+      key,
+      `${JSON.stringify(before)} -> ${JSON.stringify(after)}`,
+    ]),
+  );
 }
