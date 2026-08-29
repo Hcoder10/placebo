@@ -210,6 +210,39 @@ whether a specific state change was caused by the player's action or was going t
 happen regardless. A launch gate accepts the reward hack in this repo; only a
 no-collect control rejects it.
 
+## The loop, closed
+
+The harness runs experiments; the experiments become training data; the trained
+model is served back to the harness behind the same URL.
+
+```
+  serve gpt-oss-20b  ──▶  agent runs experiments in Roblox  ──▶  verified arms
+        ▲                                                            │
+        └──────  vllm --lora placebo  ◀──  LoRA DPO  ◀───────────────┘
+```
+
+Measured end to end today:
+
+| step | result |
+| --- | --- |
+| Causal verification, live Studio | **7/7** candidates scored as expected, `iso` and `settled` true throughout |
+| Build from scratch | correct implementation accepted; 11 defects rejected |
+| Extend without regressing | correct accepted; a candidate that added the door and dropped the coin reported `BROKE coin_awards_once` |
+| Scraper self-repair | all 4 fields recovered after a site redesign, spec rewritten at revision 2 |
+| Engine adjudication | **3 of 4** scraped claims rejected, each for a distinct, specific reason |
+| Preference export | 25 pairs, 3 supervised examples — every label a measured causal difference |
+| LoRA DPO on gpt-oss-20b | train loss 0.39, 31.8 MB adapter |
+| Adapter served | one endpoint exposes `gpt-oss-20b` and `placebo` |
+
+**What these numbers are not.** The dataset is 25 pairs generated in an
+afternoon, and the training run took 30 seconds. `rewards/accuracies: 1.0`
+means the model separated its training set, which is trivially achievable at
+that size and says nothing about generalisation. What is demonstrated is that
+the pipeline runs end to end and that every label in it came from a live engine
+rather than from a judge model. The capability claim needs a dataset an order of
+magnitude larger, which is a matter of running it longer, not of building
+anything else.
+
 ## Modes
 
 Three kinds of task, one mechanism. The only structural difference is which
