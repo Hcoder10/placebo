@@ -179,12 +179,27 @@ async function main(): Promise<void> {
     input: [{ type: 'user.message', content: `Build this game: ${request}` }] as never,
   });
 
-  const finished = turn as unknown as {
+  // createTurn returns as soon as the turn is accepted, not when it has
+  // finished, so the result has to be waited for rather than read.
+  interface TurnState {
     state?: { status?: string; message?: string; output?: { content?: string } };
-  };
+  }
+  const turnId = (turn as unknown as { id?: string }).id ?? '';
+  const TERMINAL = new Set(['done', 'error', 'cancelled', 'failed']);
+
+  let finished = turn as unknown as TurnState;
+  const deadline = Date.now() + 30 * 60 * 1000;
+  while (!TERMINAL.has(finished.state?.status ?? '') && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    const polled = await client.sessions.getTurn(session.id, turnId).catch(() => null);
+    if (polled) finished = polled.data as unknown as TurnState;
+  }
+
   const final = finished.state?.output?.content ?? '';
-  if (finished.state?.status && finished.state.status !== 'done') {
-    process.stdout.write(`  turn ${finished.state.status}: ${finished.state.message ?? ''}\n`);
+  if (finished.state?.status !== 'done') {
+    process.stdout.write(
+      `  turn ${finished.state?.status ?? 'timed out'}: ${finished.state?.message ?? ''}\n`,
+    );
   }
 
   const state = (await (await fetch(`${MCP_HOST}/api/state`)).json()) as {
