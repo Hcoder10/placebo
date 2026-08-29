@@ -55,9 +55,32 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Only the LAST one, and this is not a detail.
+  //
+  // Each step's accepted implementation is cumulative — `buildGame` accretes
+  // mechanics, so the door candidate is the coin mechanic plus the door, which
+  // is exactly why it is required to keep `coin_awards_once` passing.
+  // Installing every step's winner therefore connects two handlers to the same
+  // Collect event.
+  //
+  // Measured, three collects per configuration:
+  //
+  //   coin then door   scores 1,2,3   door opens: true
+  //   door then coin   scores 1,2,3   door opens: FALSE
+  //   door alone       scores 1,2,3   door opens: true
+  //
+  // It does not double-count — both guard on the coin still existing, so
+  // whichever runs second bails — but only one of them completes, and which one
+  // depends on Roblox's handler dispatch order, which is not guaranteed. The
+  // list order happened to be lucky. Reorder it, add a task, or let Roblox
+  // change dispatch, and the door quietly stops opening while every contract
+  // still passes, because verification never installs two implementations at
+  // once.
+  const install = accepted.slice(-1);
+
   const session = new StudioSession();
   await session.connect();
-  const raw = await session.luau(playableLuau({ mechanic: accepted.join('\n\n') }));
+  const raw = await session.luau(playableLuau({ mechanic: install.join('\n\n') }));
   await session.close();
 
   process.stdout.write(`\n  ${typeof raw === 'string' ? raw : JSON.stringify(raw)}\n`);

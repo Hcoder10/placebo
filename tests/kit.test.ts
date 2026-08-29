@@ -9,9 +9,12 @@ import {
   KIT_LUAU,
   PALETTE,
   PALETTE_TOLERANCE_RGB,
+  PLAY_SCRIPT_SOURCE,
   isOnGrid,
+  luauLongString,
   nearestPaletteEntry,
   paletteEntry,
+  playableLuau,
   rgbDistance,
   snapToGrid,
   withKit,
@@ -167,6 +170,91 @@ describe('withKit', () => {
   it('leaves the agent code byte-identical', () => {
     const luau = 'local coin = kit.coin(sandbox, 8, 0, 0, "Coin")\ncoin:SetAttribute("Value", 1)';
     expect(withKit(luau)).toContain(luau);
+  });
+});
+
+describe('long strings', () => {
+  it('picks a bracket level the content does not already contain', () => {
+    expect(luauLongString('plain').startsWith('[[')).toBe(true);
+    expect(luauLongString('a ]] b').startsWith('[=[')).toBe(true);
+    expect(luauLongString('a ]] b ]=] c').startsWith('[==[')).toBe(true);
+  });
+
+  it('preserves the content, plus the one newline that keeps it safe', () => {
+    // A value ending in "]" placed against a closing "]]" would terminate the
+    // string a character early, and the level check cannot see that because the
+    // terminator does not exist until the two are concatenated.
+    const value = 'return x[1]';
+    const wrapped = luauLongString(value);
+    expect(wrapped).toBe(`[[\n${value}\n]]`);
+  });
+});
+
+describe('the play layer', () => {
+  it('is not part of the kit prelude or its bootstrap', () => {
+    // The hard constraint. These are Scripts, and worldstate.ts watches Source,
+    // so a play layer present during verification would show up in the causal
+    // diff. It has to be a separate step, and this is what keeps it one.
+    expect(KIT_LUAU).not.toContain('PlayLayer');
+    expect(KIT_LUAU).not.toContain(PLAY_SCRIPT_SOURCE);
+    expect(withKit('-- build something')).not.toContain(PLAY_SCRIPT_SOURCE);
+    expect(KIT_BOOTSTRAP_LUAU).not.toContain('playable');
+  });
+
+  it('debounces every physical trigger', () => {
+    // Touched fires many times per contact, and missing_debounce is one of the
+    // defects the calibration table rejects. Handing the player the exact bug
+    // the verifier catches would be an unforced error.
+    expect(PLAY_SCRIPT_SOURCE).toContain('local function ready(part, seconds)');
+    for (const guard of [
+      'if not ready(part, TOUCH_DEBOUNCE) then return end',
+      'if not ready(part, HAZARD_DEBOUNCE) then return end',
+      'if not ready(part, PROMPT_DEBOUNCE) then return end',
+    ]) {
+      expect(PLAY_SCRIPT_SOURCE).toContain(guard);
+    }
+  });
+
+  it('responds to players rather than to falling scenery', () => {
+    expect(PLAY_SCRIPT_SOURCE).toContain("FindFirstChildOfClass(\"Humanoid\")");
+    expect(PLAY_SCRIPT_SOURCE).toContain('if not touchedByPlayer(hit) then return end');
+  });
+
+  it('dispatches on KitRole, never on instance names', () => {
+    expect(PLAY_SCRIPT_SOURCE).toContain('local role = part:GetAttribute("KitRole")');
+    // The coin demo's names must not be baked in, or the layer only works for
+    // the one world it was written against.
+    for (const name of ['"Coin"', '"ChestA"', '"ChestB"', '"Door"', '"Scoreboard"']) {
+      expect(PLAY_SCRIPT_SOURCE).not.toContain(name);
+    }
+  });
+
+  it('only fires events the contracts already verify', () => {
+    for (const event of ['event("Collect")', 'event("Use")', 'event("StepOn")']) {
+      expect(PLAY_SCRIPT_SOURCE).toContain(event);
+    }
+    // Output reacts to attributes; it must never set one, or the play layer
+    // would be causing the effects the verifier attributes to the mechanic.
+    expect(PLAY_SCRIPT_SOURCE).not.toContain('SetAttribute');
+  });
+
+  it('installs the accepted patch alongside the triggers', () => {
+    // Without this the layer fires events into a world where nothing listens:
+    // the patch only ever ran in the command bar during verification.
+    const program = playableLuau({ mechanic: 'sandbox.Collect.Event:Connect(function() end)' });
+    expect(program).toContain(KIT_LUAU);
+    expect(program).toContain('function kit.playable(parent, mechanicSource)');
+    expect(program).toContain('sandbox.Collect.Event:Connect(function() end)');
+    expect(program).toContain('local sandbox = script.Parent');
+  });
+
+  it('attaches nothing to listen with when no patch is supplied', () => {
+    expect(playableLuau()).toContain('kit.playable(sandbox, nil)');
+  });
+
+  it('targets the sandbox by default and any root on request', () => {
+    expect(playableLuau()).toContain('workspace:FindFirstChild("PlaceboSandbox")');
+    expect(playableLuau({ root: 'MyGame' })).toContain('workspace:FindFirstChild("MyGame")');
   });
 });
 
