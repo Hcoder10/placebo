@@ -1,0 +1,54 @@
+id: door_opens_at_three
+requirement: >-
+  When the player's third coin is collected, the door opens. Collecting fewer
+  than three leaves it shut, and the door never opens on its own.
+
+# No setup: this contract runs inside a task, which owns the shared world so
+# every contract sees the same instances.
+
+# Three collects — the interaction that should open the door.
+# task.wait() between collects is load-bearing, not cosmetic. Collect:Fire is
+# deferred, so without a yield all three fires queue up and the handlers run
+# only after the loop has already replaced the coins — the mechanic then sees
+# one coin, awards once, and the door never reaches its threshold.
+treatment: |
+  for _ = 1, 3 do
+    sandbox.Collect:Fire("P1")
+    task.wait()
+    if not sandbox:FindFirstChild("Coin") then
+      local fresh = Instance.new("Part")
+      fresh.Name = "Coin"
+      fresh.Anchored = true
+      fresh.Parent = sandbox
+    end
+  end
+
+controls:
+  # Two collects. One short of the threshold, so the door must stay shut. This
+  # is the control that catches "opens on any collect" and "opens at startup"
+  # with one comparison.
+  - name: two_collects
+    steps: |
+      for _ = 1, 2 do
+        sandbox.Collect:Fire("P1")
+        task.wait()
+        if not sandbox:FindFirstChild("Coin") then
+          local fresh = Instance.new("Part")
+          fresh.Name = "Coin"
+          fresh.Anchored = true
+          fresh.Parent = sandbox
+        end
+      end
+
+  - name: no_collect
+    steps: |
+      -- the player never collects anything
+
+effects:
+  - key: "Door.@Open"
+    change: "false->true"
+
+non_effects:
+  - "OtherScoreboard.@Coins"
+
+realizations: [1]

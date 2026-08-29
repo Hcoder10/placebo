@@ -31,8 +31,15 @@ export const ContractSchema = z
   .object({
     id: z.string().min(1),
     requirement: z.string().min(1),
-    /** Luau that builds the world for one branch, from nothing. */
-    setup: z.string().min(1),
+    /**
+     * Luau that builds the world for one branch, from nothing.
+     *
+     * Optional because a contract used inside a task takes the task's shared
+     * world instead: every contract in a multi-contract task must run against
+     * the same instances, or a patch written for one would fail to resolve
+     * names in another.
+     */
+    setup: z.string().default(''),
     /** Luau for the intervention under test. */
     treatment: z.string().min(1),
     controls: z.array(ControlSchema).min(1, 'a contract without a matched control is a unit test'),

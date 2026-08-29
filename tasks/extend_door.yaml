@@ -1,0 +1,56 @@
+id: extend_door
+mode: extend
+goal: >-
+  The coin mechanic already works. Add a door that opens on the third coin,
+  without breaking the coin mechanic.
+
+# The world every contract in this task shares.
+setup: |
+  local coin = Instance.new("Part")
+  coin.Name = "Coin"
+  coin.Anchored = true
+  coin.Parent = sandbox
+
+  local board = Instance.new("Part")
+  board.Name = "Scoreboard"
+  board.Anchored = true
+  board:SetAttribute("Coins", 0)
+  board.Parent = sandbox
+
+  local other = Instance.new("Part")
+  other.Name = "OtherScoreboard"
+  other.Anchored = true
+  other:SetAttribute("Coins", 0)
+  other.Parent = sandbox
+
+  local door = Instance.new("Part")
+  door.Name = "Door"
+  door.Anchored = true
+  door:SetAttribute("Open", false)
+  door.Parent = sandbox
+
+  local collect = Instance.new("BindableEvent")
+  collect.Name = "Collect"
+  collect.Parent = sandbox
+
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
+# The working mechanic the agent starts from and must not break.
+baseline: |
+  local board = sandbox.Scoreboard
+  sandbox.Collect.Event:Connect(function()
+    local coin = sandbox:FindFirstChild("Coin")
+    if not coin then return end
+    board:SetAttribute("Coins", (board:GetAttribute("Coins") or 0) + 1)
+    coin:Destroy()
+  end)
+
+contracts:
+  - ../contracts/coin_awards_once.yaml
+  - ../contracts/door_opens_at_three.yaml
+
+# Held before the agent touched anything. This is the regression set.
+already_satisfied:
+  - coin_awards_once
