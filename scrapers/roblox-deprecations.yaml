@@ -1,0 +1,46 @@
+name: roblox-deprecations
+revision: 2
+description: "Deprecated Roblox API members and their replacements. Feeds the curriculum
+  generator: the web proposes what changed, and the engine decides whether the resulting
+  task is real."
+url: https://create.roblox.com/docs/reference/engine/deprecations
+fetch:
+  via: fixture
+  zone: web_unlocker1
+  fixture: roblox-deprecations-v1.html
+record_selector: .deprecation
+fields:
+  class_name:
+    selector: '[data-field="engine-class"]'
+    validator: class-name
+  member:
+    selector: '[data-field="member-name"]'
+    validator: identifier
+  replacement:
+    selector: '[data-field="use-instead"]'
+    validator: identifier
+  deprecated_in:
+    selector: '[data-field="since"]'
+    pattern: (\d+\.\d+)
+    validator: semver
+repairs:
+  - at: 2026-08-29T19:18:17.158Z
+    field: class_name
+    from: .api-class
+    to: '[data-field="engine-class"]'
+    reason: class-name shape in 3/3 records, column 0
+  - at: 2026-08-29T19:18:17.158Z
+    field: member
+    from: .api-member
+    to: '[data-field="member-name"]'
+    reason: identifier shape in 3/3 records, column 1
+  - at: 2026-08-29T19:18:17.158Z
+    field: replacement
+    from: .api-replacement
+    to: '[data-field="use-instead"]'
+    reason: identifier shape in 3/3 records, column 2
+  - at: 2026-08-29T19:18:17.158Z
+    field: deprecated_in
+    from: .api-version
+    to: '[data-field="since"]'
+    reason: semver shape in 3/3 records, column 3
