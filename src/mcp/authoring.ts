@@ -1,4 +1,5 @@
 import { ContractSchema, type Contract } from '../verifier/contract.js';
+import { withKit } from '../verifier/kit.js';
 import type { StudioSession } from '../verifier/studio.js';
 import { auditContract, type ContractAudit } from '../verifier/validate.js';
 
@@ -58,7 +59,7 @@ if not sandbox then
 	sandbox.Name = ${JSON.stringify(this.root)}
 	sandbox.Parent = workspace
 end
-${luau}
+${withKit(luau)}
 return "built"
 `);
       this.worldSteps.push(luau);
@@ -72,9 +73,22 @@ return "built"
     }
   }
 
-  /** The accumulated world as one `setup` block a contract can rebuild from. */
+  /**
+   * The accumulated world as one `setup` block a contract can rebuild from.
+   *
+   * The kit is prepended here for the same reason it is prepended at build
+   * time: the steps call `kit.coin(...)` and friends, and a rebuild that ran
+   * them without `kit` in scope would fail on every condition -- which the
+   * verifier would then report as a world that cannot be constructed rather
+   * than as a missing dependency.
+   *
+   * Each step keeps its own `do ... end` block so the replay scopes locals the
+   * way the live build did. Otherwise a step could reference a local left over
+   * from an earlier one, succeed on replay, and fail when built for real.
+   */
   setup(): string {
-    return this.worldSteps.join('\n');
+    const blocks = this.worldSteps.map(step => `do\n${step}\nend`);
+    return withKit(blocks.join('\n'));
   }
 
   worldStepCount(): number {

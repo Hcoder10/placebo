@@ -8,6 +8,7 @@ import { loadContract } from '../verifier/contract.js';
 import { auditContract } from '../verifier/validate.js';
 import { evaluate } from '../verifier/effect.js';
 import { StudioSession } from '../verifier/studio.js';
+import { inspectDesign } from '../verifier/design.js';
 import { Authoring } from './authoring.js';
 import { Run, scorePrediction } from './runstate.js';
 
@@ -199,7 +200,7 @@ function buildServer(): McpServer {
     {
       title: 'Create objects in the game world',
       description:
-        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` is in scope. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
+        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` and `kit` are in scope. Prefer kit constructors over raw Instance.new: kit.platform(sandbox, x, y, z, width, depth), kit.coin(sandbox, x, y, z), kit.door(sandbox, x, y, z, axis), kit.wall(sandbox, x, y, z, length, axis), kit.hazard(sandbox, x, y, z, width, depth), kit.spawn(sandbox, x, y, z), kit.decor(sandbox, x, y, z, kind). They return the instance, so you can still attach Attributes. Lighting and ground are already applied. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
       inputSchema: {
         luau: z.string().describe('Luau that builds part of the world. `sandbox` is in scope.'),
       },
@@ -259,6 +260,41 @@ function buildServer(): McpServer {
       };
 
       return text(await authoring.propose({ session: await session(), draft, reference }));
+    },
+  );
+
+  server.registerTool(
+    'design_check',
+    {
+      title: 'Inspect how the world looks',
+      description:
+        'Measures the appearance of what you have built: palette adherence, overlapping geometry, grid alignment, proportion, variety, and whether anything is still an unstyled default part. Read-only. Findings name the instance and what was observed, so fix them with world_build and check again.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async () => {
+      const report = await inspectDesign(await session(), authoring.root);
+      return text({
+        passed: report.passed,
+        parts: report.parts,
+        from_kit: report.kitParts,
+        hand_rolled: report.handRolled,
+        checks: report.checks.map(check => ({
+          check: check.name,
+          pass: check.pass,
+          inspected: check.inspected,
+          note: check.note,
+          // `fix` is carried through verbatim: it is phrased as the change to
+          // make, which is the only part of a finding an agent can act on.
+          findings: check.findings.map(finding => ({
+            instance: finding.instance,
+            observed: finding.observed,
+            expected: finding.expected,
+            fix: finding.fix,
+          })),
+          omitted: check.omitted,
+        })),
+      });
     },
   );
 

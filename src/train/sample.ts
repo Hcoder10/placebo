@@ -76,40 +76,44 @@ export function extractLuau(raw: string): string {
 }
 
 /**
- * Rejects output that is not worth spending engine runs on.
+ * Is this worth spending engine runs on?
  *
- * Engine evaluation is the expensive resource — every candidate costs a full
- * rebuild per condition per realization — so obviously-empty samples are
- * filtered here rather than discovered to be inert after a dozen runs.
+ * Engine evaluation is the expensive resource here -- every candidate costs a
+ * full world rebuild per condition per realization -- so output that is plainly
+ * not code is discarded before it gets there.
  *
- * The bar is deliberately low. Anything that plausibly *is* Luau goes to the
- * engine, because deciding whether code works is the engine's job and a
- * cleverer filter here would start silently discarding the interesting
- * failures.
+ * The bar is deliberately low, and the reason is worth stating: deciding
+ * whether Luau is *correct* is the engine's job, and a cleverer filter starts
+ * silently discarding the interesting failures. An earlier version also
+ * required the text to mention `sandbox`, which threw away every sample where
+ * the model reached for `game:GetService` instead -- a real and instructive
+ * mistake the corpus wants as a negative, not one the filter should hide.
+ * The only thing being excluded is prose.
+ *
+ * Returns the name of the check that failed, or null when the sample passes,
+ * so a run that discards everything can say which rule did it.
  */
-function plausible(luau: string): boolean {
-  if (luau.length < 12) return false;
-  if (!/sandbox/.test(luau)) return false;
+function implausible(luau: string): string | null {
+  if (luau.length < 12) return 'too-short';
 
-  // Requiring a real Luau construct, not merely punctuation. An earlier version
-  // accepted anything containing `=`, `(` or `:`, which every English sentence
-  // about Luau also contains -- so explanations of the mechanic were evaluated
-  // as though they were the mechanic.
+  // A first-person plural plan ("We need to...") is the model thinking out
+  // loud. Checked first: reasoning text can still contain the word `function`.
+  if (/^\s*(we|the user|okay|so\b|let's|first,|i need|here'?s)\b/i.test(luau)) return 'prose-opening';
+
   const constructs = [
-    /local\s+\w/,
-    /function/,
+    /\blocal\s+\w/,
+    /\bfunction\s*\(/,
+    /\bfunction\s+\w/,
     /:Connect\s*\(/,
     /:SetAttribute\s*\(/,
-    /Instance\.new\s*\(/,
-    /sandbox[.:]\w/,
+    /:GetAttribute\s*\(/,
+    /\bInstance\.new\s*\(/,
+    /\bgame:GetService\s*\(/,
+    /\bend\s*\)/,
   ];
-  if (!constructs.some(pattern => pattern.test(luau))) return false;
+  if (!constructs.some(pattern => pattern.test(luau))) return 'no-luau-construct';
 
-  // Prose gives itself away by sentence structure: a first-person plural plan
-  // ("We need to...") is the model thinking out loud, never code.
-  if (/^\s*(we|the user|okay|let's|first,|i need)/i.test(luau)) return false;
-
-  return true;
+  return null;
 }
 
 export interface SampleParams {
@@ -245,8 +249,16 @@ export async function sampleCandidates(params: SampleParams): Promise<SampleRepo
       continue;
     }
     const luau = extractLuau(raw.content);
-    if (!plausible(luau)) {
+    const rejected = implausible(luau);
+    if (rejected !== null) {
       unusable += 1;
+      // Why a draw was discarded is the difference between a filter that is
+      // protecting the corpus and one that is quietly emptying it.
+      if (process.env.PLACEBO_DEBUG_SAMPLES === '1') {
+        process.stdout.write(
+          `    [unusable:${rejected}] len=${String(luau.length)} ${JSON.stringify(luau.slice(0, 120))}\n`,
+        );
+      }
       continue;
     }
 

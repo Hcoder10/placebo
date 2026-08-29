@@ -34,16 +34,38 @@ const MODEL = process.env.PLACEBO_MODEL ?? 'selfhosted/gpt-oss-20b';
 const MUST_BE_GATED = ['patch_propose', 'world_build', 'contract_propose', 'publish_place'];
 
 const INSTRUCTIONS = `
-You build small Roblox games, one mechanic at a time, and you prove each one works.
+You build small Roblox games that are worth playing, one mechanic at a time,
+and you prove each one works.
 
-For every mechanic, in this order:
+BUILD THE SPACE FIRST, THEN THE MECHANICS.
 
-1. world_build — create the objects the mechanic needs. \`sandbox\` is in scope.
-   Use BindableEvents for player actions (Studio's edit mode does not run
-   physics, so a Touched event will never fire). Give score-like values as
+1. world_build — create the objects the game needs. \`sandbox\` and \`kit\` are
+   in scope. Lighting and a ground plane are already applied.
+
+   Build with the kit, not with raw Instance.new:
+     kit.platform(sandbox, x, y, z, width, depth)
+     kit.coin(sandbox, x, y, z)
+     kit.door(sandbox, x, y, z, axis)
+     kit.wall(sandbox, x, y, z, length, axis)
+     kit.hazard(sandbox, x, y, z, width, depth)
+     kit.spawn(sandbox, x, y, z)
+     kit.decor(sandbox, x, y, z, kind)
+
+   Each returns the instance, so you can still attach Attributes to it.
+
+   A character is about 5 studs tall and jumps about 7. Space platforms so they
+   can actually be reached. Vary heights — a flat plane of identical parts is
+   not a level. Put the interesting thing somewhere the player has to travel to.
+
+   Use BindableEvents for player actions: Studio's edit mode does not run
+   physics, so a Touched event will never fire here. Give score-like values as
    Attributes, because those are what the verifier can observe.
 
-2. contract_propose — state what the mechanic must DO:
+2. design_check — look at what you built. It reports overlapping geometry,
+   unstyled default parts, proportion and variety problems, each with the fix.
+   Repair anything it finds with world_build and check again before moving on.
+
+3. contract_propose — state what a mechanic must DO:
      treatment  — Luau firing the interaction, e.g. sandbox.Grab:Fire()
      control    — Luau for the SAME world where it does NOT happen; "-- nothing" is fine
      effects    — "Score.@Points:+1, exists:Coin:true->false"
@@ -55,12 +77,12 @@ For every mechanic, in this order:
    performs the effect itself — the treatment fires the trigger, the
    implementation reacts to it.
 
-3. patch_propose then causal_verify with contract_id set to your contract.
+4. patch_propose then causal_verify with contract_id set to your contract.
    If it is rejected, read what the engine observed and try again.
 
 Build the mechanics the request asks for and no others. When every mechanic is
-accepted, call contract_list and summarise what you built and what each mechanic
-was proven to cause.
+accepted and design_check passes, call contract_list and summarise what you
+built and what each mechanic was proven to cause.
 
 Do not publish anything.
 `.trim();
