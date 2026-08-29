@@ -93,6 +93,31 @@ Recorded in the repo so it cannot drift under pressure:
 - **The DGX Spark numbers are arithmetic, not measurement.** We do not have one.
   [DGX_SPARK.md](DGX_SPARK.md) shows the working so it is falsifiable.
 
+## Known limitation: the live fan-out does not run
+
+The orchestrator that fans branches out through `create_sub_agent` is written,
+typechecked, and registered with the harness — `assertGated` passes and all six
+tools resolve to their intended selectors. It has not been demonstrated
+end to end with a live model, for a specific reason:
+
+gpt-oss-20b emits tool calls in Harmony format, and vLLM 0.28 does not surface
+them as `tool_calls`. The model's own reasoning trace says it intends to call the
+tool; the field comes back `null`. The obvious override
+(`VLLM_ATTENTION_BACKEND`-style env config for the tool parser) no longer exists
+in that version. Serving a second model with better-supported tool calling was
+attempted and did not come up in the time available.
+
+So the counterfactual branching is demonstrated by `scripts/seed-branches.ts`,
+which drives the identical MCP surface against the identical live Studio with
+fixed candidates instead of model-generated ones. Every part downstream of the
+model — prediction scoring, causal verification, ranking, the console — is
+exercised. What is unproven is that a model drives it well, not that the
+mechanism works.
+
+Building the pipeline so this was survivable was deliberate: the dataset, the
+verifier, and the console were all made to work without a model precisely so a
+serving problem could not take the submission down with it.
+
 ## Why a DGX Spark is the right home for this
 
 Not incidental to the prize — the hardware's shape is the argument for the stack.
