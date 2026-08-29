@@ -128,8 +128,10 @@ def main() -> None:
         logging_steps=1,
         save_strategy="epoch",
         bf16=True,
+        # TRL 1.12 dropped max_prompt_length / max_completion_length; max_length
+        # is the only length knob DPOConfig still exposes. Verified against the
+        # installed dataclass rather than assumed from documentation.
         max_length=args.max_len,
-        max_prompt_length=args.max_len // 2,
         beta=0.1,
         report_to=[],
     )
