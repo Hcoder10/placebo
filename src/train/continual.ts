@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { candidatesFor } from '../verifier/candidates.js';
+import { sampleCandidates } from './sample.js';
 import { evaluateTask, verifyBaseline } from '../verifier/evaluateTask.js';
 import { StudioSession } from '../verifier/studio.js';
 import { loadTask } from '../verifier/task.js';
@@ -37,6 +38,11 @@ const SFT = join(DATA, 'sft.jsonl');
 const CURRICULUM = join(DATA, 'curriculum.jsonl');
 /** Target generations, which are what a draft model has to learn to predict. */
 const DRAFT_TRACES = join(DATA, 'draft-traces.jsonl');
+
+const SAMPLE_ENDPOINT = process.env.PLACEBO_BASE_URL ?? 'http://100.79.153.43:8000/v1';
+const SAMPLE_MODEL = process.env.PLACEBO_TARGET_MODEL ?? 'gpt-oss-20b';
+/** Draws per task per turn. Each one costs a full set of engine runs. */
+const SAMPLES_PER_TASK = Number(process.env.PLACEBO_SAMPLES ?? '12');
 
 const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
 
@@ -194,7 +200,11 @@ async function main(): Promise<void> {
   await session.connect();
 
   await collectCurriculum(session, turn);
-  await collectDraftTraces(turn);
+  // Skippable because draft-trace collection writes the same file a draft
+  // training run reads from, and two writers appending interleaved partial
+  // lines to one jsonl is a corrupted dataset rather than a merge.
+  if (process.env.PLACEBO_SKIP_TRACES !== '1') await collectDraftTraces(turn);
+  else process.stdout.write('  draft traces: skipped (owned by another run)\n');
 
   for (const relative of tasks) {
     const { task, contracts } = loadTask(join(ROOT, relative));
@@ -214,8 +224,28 @@ async function main(): Promise<void> {
       task.baseline.trim() ? `Current implementation:\n\`\`\`lua\n${task.baseline.trim()}\n\`\`\`` : 'There is no implementation yet.',
     ].join('\n');
 
+    // Hand-authored candidates first (they exhaust after one turn), then as
+    // many fresh ones as the target will produce. The second source is what
+    // makes the loop able to run again tomorrow.
+    const authored = candidatesFor(task);
+    const known = new Set(
+      [...corpus.values()].filter(row => row.task === task.id).map(row => row.candidate),
+    );
+    const sampled = await sampleCandidates({
+      endpoint: SAMPLE_ENDPOINT,
+      model: SAMPLE_MODEL,
+      system: SYSTEM,
+      prompt,
+      count: SAMPLES_PER_TASK,
+      known,
+    });
+    process.stdout.write(
+      `  ${task.id.padEnd(16)} sampled ${String(sampled.returned)}/${String(sampled.requested)}` +
+        ` (${String(sampled.duplicates)} dup, ${String(sampled.unusable)} unusable, ${String(sampled.truncated)} truncated, ${String(sampled.failed)} failed)\n`,
+    );
+
     let added = 0;
-    for (const candidate of candidatesFor(task)) {
+    for (const candidate of [...authored, ...sampled.candidates]) {
       const key = `${task.id}::${candidate.id}`;
       if (corpus.has(key)) continue; // already measured in an earlier turn
 

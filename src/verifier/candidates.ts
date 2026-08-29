@@ -20,7 +20,19 @@ export interface Candidate {
   id: string;
   /** What a reader should understand this candidate to be doing wrong. */
   defect: string;
-  correct: boolean;
+  /**
+   * What a human expected the verdict to be, where a human had an expectation.
+   *
+   * Undefined means nobody predicted anything -- which is the honest state for
+   * a candidate sampled from the model rather than written by hand. The
+   * distinction matters because this field is what the calibration harness
+   * checks the verifier against: a sampled candidate labelled from the
+   * verifier's own verdict would be scored as evidence that the verifier agrees
+   * with itself. Leaving it undefined keeps those rows out of the calibration
+   * set while still letting them into the training corpus, where the verdict is
+   * the label and no prior expectation is needed.
+   */
+  correct?: boolean;
   luau: string;
 }
 

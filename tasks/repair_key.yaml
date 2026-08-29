@@ -1,0 +1,46 @@
+id: repair_key
+mode: repair
+goal: >-
+  The chest mechanic is wired up and does something, but it is wrong: any key
+  opens every chest. Fix it so a key opens only the chest it belongs to.
+
+setup: |
+  local use = Instance.new("BindableEvent")
+  use.Name = "Use"
+  use.Parent = sandbox
+
+  local chestA = Instance.new("Part")
+  chestA.Name = "ChestA"
+  chestA.Anchored = true
+  chestA:SetAttribute("Locked", true)
+  chestA:SetAttribute("KeyId", "KeyA")
+  chestA.Parent = sandbox
+
+  local chestB = Instance.new("Part")
+  chestB.Name = "ChestB"
+  chestB.Anchored = true
+  chestB:SetAttribute("Locked", true)
+  chestB:SetAttribute("KeyId", "KeyB")
+  chestB.Parent = sandbox
+
+# The bug, stated as code rather than as prose.
+#
+# It is deliberately the plausible kind: someone wrote the mechanic, tested it
+# with one chest, and shipped. It passes any test that only ever looks at the
+# chest you meant to open, which is why the contract insists on a second chest
+# and a control that uses the wrong key.
+baseline: |
+  sandbox.Use.Event:Connect(function()
+    for _, child in ipairs(sandbox:GetChildren()) do
+      if child:GetAttribute("Locked") ~= nil then
+        child:SetAttribute("Locked", false)
+      end
+    end
+  end)
+
+contracts:
+  - ../contracts/key_unlocks_matching_chest.yaml
+
+# Nothing is satisfied yet -- that is what makes this a repair rather than an
+# extension.
+already_satisfied: []
