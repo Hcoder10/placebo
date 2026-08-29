@@ -9,6 +9,7 @@ import { auditContract } from '../verifier/validate.js';
 import { evaluate } from '../verifier/effect.js';
 import { StudioSession } from '../verifier/studio.js';
 import { inspectDesign } from '../verifier/design.js';
+import { KIT_BRIEF, KIT_LIGHTING_RESTORE_LUAU } from '../verifier/kit.js';
 import { Authoring } from './authoring.js';
 import { Run, scorePrediction } from './runstate.js';
 
@@ -200,7 +201,8 @@ function buildServer(): McpServer {
     {
       title: 'Create objects in the game world',
       description:
-        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` and `kit` are in scope. Prefer kit constructors over raw Instance.new: kit.platform(sandbox, x, y, z, width, depth), kit.coin(sandbox, x, y, z), kit.door(sandbox, x, y, z, axis), kit.wall(sandbox, x, y, z, length, axis), kit.hazard(sandbox, x, y, z, width, depth), kit.spawn(sandbox, x, y, z), kit.decor(sandbox, x, y, z, kind). They return the instance, so you can still attach Attributes. Lighting and ground are already applied. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
+        'Runs Luau that creates or configures instances under the sandbox root. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.\n\n' +
+        KIT_BRIEF,
       inputSchema: {
         luau: z.string().describe('Luau that builds part of the world. `sandbox` is in scope.'),
       },
