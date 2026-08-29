@@ -151,6 +151,237 @@ export function nearestPaletteEntry(rgb: readonly number[]): { entry: PaletteEnt
   return best;
 }
 
+/** A palette entry as the Luau constructor for it, so colours are declared once. */
+function paletteColor3(name: string): string {
+  const entry = paletteEntry(name);
+  if (!entry) throw new Error(`no palette entry named ${name}`);
+  return `Color3.fromRGB(${entry.rgb.join(', ')})`;
+}
+
+/**
+ * Wraps arbitrary text as a Luau long string, at a bracket level the text does
+ * not already contain.
+ *
+ * Used to embed one program inside another — the play layer's source inside the
+ * kit, and a verified patch inside the script that installs it. Escaping quotes
+ * and newlines by hand would work until a patch contained a backslash; picking a
+ * level that does not collide cannot fail on content.
+ *
+ * The value comes back with one newline appended, and that newline is
+ * load-bearing rather than cosmetic. Luau skips a newline immediately after the
+ * opening bracket, so the leading one costs nothing; the trailing one is what
+ * stops content ending in `]` from meeting the closing `]]` and forming an
+ * early terminator that the level check cannot see.
+ */
+export function luauLongString(value: string): string {
+  let level = 0;
+  while (value.includes(`]${'='.repeat(level)}]`)) level += 1;
+  const equals = '='.repeat(level);
+  return `[${equals}[\n${value}\n]${equals}]`;
+}
+
+/**
+ * The play layer: the input and output devices a verified mechanic has no way
+ * to grow on its own.
+ *
+ * The verifier proves a claim of the form "when Collect fires, the score rises
+ * by one and the coin is destroyed". That claim is about the *mechanic*, and it
+ * is driven by a BindableEvent because Studio's edit mode runs no physics —
+ * which leaves a real gap: press Play and the coin just sits there, because
+ * nothing connects a player walking into it to the event that was proven.
+ *
+ * This closes that gap without touching the claim. It attaches physical
+ * triggers to the same events, and renders the attribute changes the mechanic
+ * causes so a player can see them. It adds no behaviour of its own: every
+ * `Fire` here goes to an event whose effect was already verified, and every
+ * visual reacts to an attribute rather than setting one.
+ *
+ * It is dispatched on `KitRole`, not on names, so it works for any world the kit
+ * built rather than for the coin demo specifically.
+ */
+export const PLAY_SCRIPT_SOURCE = `-- Attached by kit.playable. Connects physical triggers to the events the
+-- verifier proved, and shows what those events cause.
+--
+-- Nothing here decides what an interaction MEANS. It fires the same events the
+-- contracts fire and reacts to the same attributes the contracts observe, so
+-- the behaviour you play is the behaviour that was verified.
+local sandbox = script.Parent
+
+-- A Touched handler fires many times per contact. The mechanics this drives are
+-- deliberately sensitive to repetition -- "missing_debounce" is one of the
+-- defects the calibration table rejects -- so handing the player that exact bug
+-- would be an unforced error.
+local TOUCH_DEBOUNCE = 0.4
+local PROMPT_DEBOUNCE = 0.5
+local HAZARD_DEBOUNCE = 1
+-- The coin comes back so the door's three-coin threshold is reachable by
+-- playing rather than only by the contract's treatment loop.
+local RESPAWN_SECONDS = 2
+local PROMPT_DISTANCE = 12
+
+local busy = {}
+
+local function ready(part, seconds)
+	if busy[part] then return false end
+	busy[part] = true
+	task.delay(seconds, function() busy[part] = nil end)
+	return true
+end
+
+-- A trigger must respond to a player, not to falling scenery.
+local function touchedByPlayer(hit)
+	local character = hit and hit.Parent
+	if not character then return false end
+	return character:FindFirstChildOfClass("Humanoid") ~= nil
+end
+
+local function event(name)
+	local found = sandbox:FindFirstChild(name)
+	if found and found:IsA("BindableEvent") then return found end
+	return nil
+end
+
+-- Input ---------------------------------------------------------------------
+
+local function wireCoin(part)
+	local collect = event("Collect")
+	if not collect then return false end
+
+	-- Captured before the mechanic destroys it, so the respawn is the same coin
+	-- rather than an approximation of it.
+	local blueprint = part:Clone()
+
+	part.Touched:Connect(function(hit)
+		if not part.Parent then return end
+		if not touchedByPlayer(hit) then return end
+		if not ready(part, TOUCH_DEBOUNCE) then return end
+		collect:Fire("P1")
+	end)
+
+	part.AncestryChanged:Connect(function(_, parentNow)
+		if parentNow ~= nil then return end
+		task.delay(RESPAWN_SECONDS, function()
+			blueprint:Clone().Parent = sandbox
+		end)
+	end)
+	return true
+end
+
+local function wireHazard(part)
+	local stepOn = event("StepOn")
+	if not stepOn then return false end
+	part.Touched:Connect(function(hit)
+		if not touchedByPlayer(hit) then return end
+		if not ready(part, HAZARD_DEBOUNCE) then return end
+		stepOn:Fire(part.Name)
+	end)
+	return true
+end
+
+local function wireChest(part)
+	local use = event("Use")
+	if not use then return false end
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Open"
+	prompt.ObjectText = part.Name
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = PROMPT_DISTANCE
+	prompt.Parent = part
+	prompt.Triggered:Connect(function()
+		if not ready(part, PROMPT_DEBOUNCE) then return end
+		-- The key the player used. A mechanic that opens every chest on any key
+		-- is visible from here: press this and watch the other chest too.
+		use:Fire(part:GetAttribute("KeyId"))
+	end)
+	return true
+end
+
+-- Output --------------------------------------------------------------------
+--
+-- An attribute the player cannot perceive is not a mechanic they can play.
+-- These react to attributes; none of them sets one.
+
+local function showDoor(part)
+	local function apply()
+		local open = part:GetAttribute("Open") == true
+		part.CanCollide = not open
+		part.Transparency = open and 0.6 or 0
+	end
+	part:GetAttributeChangedSignal("Open"):Connect(apply)
+	apply()
+end
+
+local function showChest(part)
+	local function apply()
+		local locked = part:GetAttribute("Locked") ~= false
+		part.Color = locked and ${paletteColor3('clay')} or ${paletteColor3('gold')}
+		part.Material = locked and Enum.Material.WoodPlanks or Enum.Material.Neon
+	end
+	part:GetAttributeChangedSignal("Locked"):Connect(apply)
+	apply()
+end
+
+local function showCount(part, attribute)
+	-- Both faces, because which one the player approaches from is a property of
+	-- the level rather than of this script.
+	local labels = {}
+	for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+		local surface = Instance.new("SurfaceGui")
+		surface.Name = "Readout"
+		surface.Face = face
+		surface.CanvasSize = Vector2.new(400, 200)
+		surface.Parent = part
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBold
+		label.TextColor3 = ${paletteColor3('cream')}
+		label.Parent = surface
+		table.insert(labels, label)
+	end
+
+	local function apply()
+		local text = part.Name .. ": " .. tostring(part:GetAttribute(attribute) or 0)
+		for _, label in labels do label.Text = text end
+	end
+	part:GetAttributeChangedSignal(attribute):Connect(apply)
+	apply()
+end
+
+-- Dispatch ------------------------------------------------------------------
+
+local INPUT = { coin = wireCoin, hazard = wireHazard, chest = wireChest }
+local OUTPUT = { door = showDoor, chest = showChest }
+
+local wired = 0
+
+local function attach(part)
+	local role = part:GetAttribute("KitRole")
+	if role then
+		local input = INPUT[role]
+		if input and input(part) then wired += 1 end
+		local output = OUTPUT[role]
+		if output then output(part) end
+	end
+	-- Driven off the attribute rather than off a name, so any scoreboard the
+	-- kit built gets a readout.
+	if part:GetAttribute("Coins") ~= nil then showCount(part, "Coins") end
+end
+
+for _, descendant in sandbox:GetDescendants() do
+	if descendant:IsA("BasePart") then attach(descendant) end
+end
+
+-- Respawned coins, and anything a mechanic creates while the game is running.
+sandbox.DescendantAdded:Connect(function(descendant)
+	if descendant:IsA("BasePart") then task.defer(attach, descendant) end
+end)
+
+print("[PlayLayer] wired " .. tostring(wired) .. " trigger(s)")
+`;
+
 /** The palette, as the Luau table literal the kit closes over. */
 function paletteLuau(): string {
   return PALETTE.map(
@@ -464,6 +695,79 @@ return "lighting restored"`;
  * not get the chance to forget.
  */
 export const KIT_BOOTSTRAP_LUAU = 'kit.scene()\nkit.ground(sandbox)';
+
+/**
+ * A complete Luau program that makes an already-built world playable.
+ *
+ * Kept separate from `withKit` on purpose: this installs Scripts, and a Script
+ * in the sandbox during verification would show up in the causal diff. Run it
+ * after the verifier has finished with the world.
+ *
+ * `mechanic` is the patch the verifier accepted. Passing it is what closes the
+ * loop — the play layer fires the events, and the accepted patch is what
+ * listens. Omit it and you get triggers wired to nothing, which is exactly the
+ * state the codebase was already in.
+ */
+export function playableLuau(params: { root?: string; mechanic?: string } = {}): string {
+  const root = params.root ?? 'PlaceboSandbox';
+  const mechanic = params.mechanic ? luauLongString(params.mechanic) : 'nil';
+  // `kit.playable` is defined here rather than inside KIT_LUAU on purpose. The
+  // kit prelude ships with every verification condition, and the play layer's
+  // source is most of its weight for a function verification must never call —
+  // defining it here keeps that payload off the hot path and makes it
+  // impossible for an agent to attach Scripts mid-build by mistake.
+  return `local HttpService = game:GetService("HttpService")
+local sandbox = workspace:FindFirstChild(${JSON.stringify(root)})
+if not sandbox then return HttpService:JSONEncode({ ok = false, reason = "no world at " .. ${JSON.stringify(root)} }) end
+
+${KIT_LUAU}
+
+-- Two scripts, because a playable game needs two things the verifier keeps
+-- apart. PlayLayer is the input and output device. Mechanic is the patch the
+-- verifier accepted, installed verbatim: without it, pressing Play fires
+-- Collect into a world where nothing is listening, because the patch only ever
+-- ran in the command bar during verification.
+function kit.playable(parent, mechanicSource)
+	for _, name in { "PlayLayer", "Mechanic" } do
+		local existing = parent:FindFirstChild(name)
+		if existing then existing:Destroy() end
+	end
+
+	local play = Instance.new("Script")
+	play.Name = "PlayLayer"
+	play.Source = ${luauLongString(PLAY_SCRIPT_SOURCE)}
+	play.Parent = parent
+
+	local mechanic = nil
+	if type(mechanicSource) == "string" and mechanicSource ~= "" then
+		mechanic = Instance.new("Script")
+		mechanic.Name = "Mechanic"
+		-- The accepted patch runs unmodified. Only \`sandbox\` has to be bound,
+		-- because that is the one name the verifier had in scope and a patch
+		-- written against it does not declare.
+		mechanic.Source = "local sandbox = script.Parent\\n" .. mechanicSource
+		mechanic.Parent = parent
+	end
+
+	local counts = { coin = 0, chest = 0, hazard = 0, door = 0 }
+	for _, descendant in parent:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			local role = descendant:GetAttribute("KitRole")
+			if role and counts[role] ~= nil then counts[role] += 1 end
+		end
+	end
+
+	return { play = play, mechanic = mechanic, counts = counts }
+end
+
+local attached = kit.playable(sandbox, ${mechanic})
+return HttpService:JSONEncode({
+	ok = true,
+	playBytes = #attached.play.Source,
+	mechanicBytes = attached.mechanic and #attached.mechanic.Source or 0,
+	counts = attached.counts,
+})`;
+}
 
 export interface WithKitOptions {
   /** Apply lighting and a ground plane before the agent's code runs. */
