@@ -13,6 +13,7 @@
     "test": "vitest run",
     "verify": "tsx src/verifier/cli.ts",
     "flywheel": "tsx src/train/continual.ts",
+    "curriculum": "tsx src/train/curriculum_train.ts",
     "spec:measure": "tsx src/train/speculation.ts",
     "build:game": "tsx src/verifier/buildGame.ts",
     "make:game": "tsx src/orchestrator/makeGame.ts",
@@ -22,7 +23,8 @@
     "probe:restore": "tsx scripts/probe-restore-fidelity.ts",
     "probe:worldstate": "tsx scripts/probe-worldstate.ts",
     "playable": "tsx scripts/make-playable.ts",
-    "prove:playable": "tsx scripts/prove-playable.ts"
+    "prove:playable": "tsx scripts/prove-playable.ts",
+    "look": "tsx scripts/look.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
