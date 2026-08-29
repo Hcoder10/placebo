@@ -24,6 +24,7 @@ import { rootExpression } from './worldstate.js';
  * is the failure this project exists to avoid — it measures properties that a
  * bad-looking scene provably has and a good-looking one provably does not:
  *
+ *   authored content       a gate an empty world passes is not a gate
  *   palette adherence      a colour nobody chose is the signature of a default
  *   untouched defaults     Plastic + medium stone grey is `Instance.new("Part")`
  *   grid alignment         geometry that lines up reads as designed
@@ -60,6 +61,17 @@ const Mat3Schema = z.tuple([
 /** One part as the inspection program reports it. Colours arrive in 0-1. */
 export const PartRecordSchema = z.object({
   path: z.string(),
+  /**
+   * The same path as an array of names.
+   *
+   * `path` joins on "/" for display, which is ambiguous the moment an instance
+   * is named with a slash — and Roblox allows that. The repair hint in every
+   * finding is supposed to be runnable Luau, so it is built from these instead
+   * of by splitting the string back apart. Never empty: the walk records
+   * children, never the root itself, so the JSONEncode empty-table ambiguity
+   * cannot arise here.
+   */
+  segments: z.array(z.string()),
   class: z.string(),
   color: Vec3Schema,
   material: z.string(),
@@ -82,6 +94,7 @@ export type PartRecord = z.infer<typeof PartRecordSchema>;
 export type LightingRecord = z.infer<typeof LightingRecordSchema>;
 
 export type DesignCheckName =
+  | 'authored_content'
   | 'palette_adherence'
   | 'default_material_tell'
   | 'grid_alignment'
@@ -129,6 +142,11 @@ export interface DesignStats {
 export interface DesignReport {
   root: string;
   parts: number;
+  /**
+   * Parts the build actually authored: everything but the ground plane the kit
+   * bootstraps in. This is the number the `authored_content` check is about.
+   */
+  authoredParts: number;
   /** Parts carrying a `KitRole`: how much of the world came from the substrate. */
   kitParts: number;
   /** Parts built by hand. Not a failure on its own, but it predicts the others. */
@@ -171,6 +189,20 @@ export const VARIETY_MIN_PARTS = 5;
 /** A part this transparent is a trigger volume; its colour is not a design choice. */
 const INVISIBLE_TRANSPARENCY = 0.95;
 
+/**
+ * What a new Roblox place ships with.
+ *
+ * Used only to answer "has anyone touched this?", and the test is deliberately
+ * one-directional: lighting counts as styled when a value *differs* from stock.
+ * If Roblox changes a default, or ships a place at a value not listed here, the
+ * check degrades to its old Atmosphere-only behaviour rather than failing a
+ * scene somebody did style. Both clock times appear because Roblox has shipped
+ * both.
+ */
+const STOCK_BRIGHTNESS = 2;
+const STOCK_CLOCK_TIMES = [14, 14.5];
+const STOCK_EPSILON = 1e-3;
+
 export interface Aabb {
   min: [number, number, number];
   max: [number, number, number];
@@ -179,11 +211,11 @@ export interface Aabb {
 /**
  * World-space bounding box of a part.
  *
- * For a rotated part this is the tight axis-aligned box around the oriented
- * one, which is exact as a bounding box and conservative as a stand-in for the
- * part's actual volume. That conservatism is in the safe direction here: it can
- * only make the overlap check report a smaller fraction of a larger box, never
- * invent an overlap between parts that do not share space.
+ * Tight around the oriented box, and exact as a bounding box. It is *not* a
+ * safe stand-in for the part itself once the part is rotated off-axis: two
+ * disjoint boxes at 45 degrees have overlapping bounding boxes, so an AABB
+ * intersection is not evidence of a real intersection. `isAxisAligned` is what
+ * decides where this may be used as a proxy.
  */
 export function worldAabb(part: Pick<PartRecord, 'size' | 'pos' | 'rot'>): Aabb {
   const [sx, sy, sz] = part.size;
@@ -193,6 +225,22 @@ export function worldAabb(part: Pick<PartRecord, 'size' | 'pos' | 'rot'>): Aabb 
   const hy = 0.5 * (Math.abs(r[3]) * sx + Math.abs(r[4]) * sy + Math.abs(r[5]) * sz);
   const hz = 0.5 * (Math.abs(r[6]) * sx + Math.abs(r[7]) * sy + Math.abs(r[8]) * sz);
   return { min: [px - hx, py - hy, pz - hz], max: [px + hx, py + hy, pz + hz] };
+}
+
+/**
+ * True when the part's own axes land on world axes.
+ *
+ * A rotation matrix whose entries are all 0 or +/-1 is a signed permutation:
+ * identity and every multiple of a quarter turn. For those the world bounding
+ * box *is* the part, so a bounding-box intersection is a real intersection and
+ * the overlap check is exact. Everything the kit builds qualifies, the yawed
+ * coin included.
+ */
+export function isAxisAligned(rot: PartRecord['rot'], epsilon = 1e-3): boolean {
+  return rot.every(value => {
+    const magnitude = Math.abs(value);
+    return magnitude <= epsilon || Math.abs(magnitude - 1) <= epsilon;
+  });
 }
 
 function boxVolume(box: Aabb): number {
@@ -225,9 +273,43 @@ export function toRgb255(color: readonly [number, number, number]): [number, num
   return [Math.round(color[0] * 255), Math.round(color[1] * 255), Math.round(color[2] * 255)];
 }
 
-/** How the agent would refer to this instance in Luau, for the repair hint. */
-function luauPath(path: string): string {
-  return `sandbox.${path.split('/').join('.')}`;
+/** Luau's reserved words, which can never follow a dot. */
+const LUAU_KEYWORDS = new Set([
+  'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if',
+  'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while',
+  // Contextual in Luau rather than reserved, but quoting it costs nothing and
+  // removes the need to be right about that.
+  'continue',
+]);
+
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function luauString(value: string): string {
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+  return `"${escaped}"`;
+}
+
+/**
+ * How the agent would refer to this instance in Luau, for the repair hint.
+ *
+ * Roblox instance names are close to arbitrary text: `My Door`, `end` and
+ * `Coin#2` are all legal, and none of them can follow a dot. The whole contract
+ * of a finding's `fix` field is that it is the change to run, so a name that is
+ * not an identifier is indexed with brackets instead.
+ */
+function luauPath(segments: readonly string[]): string {
+  return segments.reduce(
+    (expression, segment) =>
+      IDENTIFIER.test(segment) && !LUAU_KEYWORDS.has(segment)
+        ? `${expression}.${segment}`
+        : `${expression}[${luauString(segment)}]`,
+    'sandbox',
+  );
 }
 
 function trim(findings: DesignFinding[]): { findings: DesignFinding[]; omitted: number } {
@@ -272,6 +354,34 @@ export function analyzeParts(params: {
   const { root, parts, lighting } = params;
   const styled = parts.filter(isStyled);
 
+  // -- was anything built at all? --------------------------------------------
+  //
+  // Every other check here is a statement about parts, so a scene with no parts
+  // satisfies all of them and the gate reports `passed` for a world containing
+  // nothing. That is the same hole `validate.ts` closes on the contract side: a
+  // contract satisfied by an empty implementation describes the world rather
+  // than the code, and a design gate satisfied by an empty world grades nothing.
+  //
+  // The kit's bootstrap supplies a ground plane on every world step, so "empty"
+  // has to mean "nothing but the floor" or the hole stays open. The threshold is
+  // deliberately zero rather than some minimum part count: this rules out the
+  // vacuous case, which is what it can defend, and does not pretend to know how
+  // many parts a game ought to have.
+  const authored = parts.filter(part => part.role !== GROUND_ROLE);
+  const authoredFindings: DesignFinding[] = [];
+  if (authored.length === 0) {
+    authoredFindings.push({
+      check: 'authored_content',
+      instance: '<scene>',
+      observed:
+        parts.length === 0
+          ? 'the root contains no parts at all'
+          : 'the only geometry is the ground plane the kit supplies',
+      expected: 'at least one part the build actually authored',
+      fix: 'build the objects the game needs: kit.platform, kit.coin, kit.door, kit.spawn',
+    });
+  }
+
   // -- palette adherence -----------------------------------------------------
   const paletteFindings: DesignFinding[] = [];
   for (const part of styled) {
@@ -283,7 +393,7 @@ export function analyzeParts(params: {
       instance: part.path,
       observed: `Color3.fromRGB(${rgb.join(', ')}) in ${part.material}`,
       expected: `one of the kit palette (nearest is ${entry.name}, ${String(Math.round(distance))} off)`,
-      fix: `kit.tint(${luauPath(part.path)}, "${entry.name}")`,
+      fix: `kit.tint(${luauPath(part.segments)}, "${entry.name}")`,
     });
   }
 
@@ -310,7 +420,7 @@ export function analyzeParts(params: {
         ? `Instance.new("Part") untouched: Plastic, medium stone grey${defaultSized ? ', 4x1x2' : ''}`
         : 'Plastic, the default material',
       expected: 'a material chosen with the colour (the kit pairs them)',
-      fix: `rebuild it with a kit constructor, or kit.tint(${luauPath(part.path)}, "sand")`,
+      fix: `rebuild it with a kit constructor, or kit.tint(${luauPath(part.segments)}, "sand")`,
     });
   }
 
@@ -323,7 +433,7 @@ export function analyzeParts(params: {
       instance: part.path,
       observed: `position (${fmt(part.pos)})`,
       expected: `every component a multiple of ${String(GRID_STUDS)}`,
-      fix: `${luauPath(part.path)}.Position = Vector3.new(${part.pos.map(snapToGrid).join(', ')})`,
+      fix: `${luauPath(part.segments)}.Position = Vector3.new(${part.pos.map(snapToGrid).join(', ')})`,
     });
   }
 
@@ -338,7 +448,7 @@ export function analyzeParts(params: {
         instance: part.path,
         observed: `size (${fmt(part.size)})`,
         expected: `every axis at least ${String(MIN_PART_STUDS)} studs`,
-        fix: `${luauPath(part.path)}.Size = Vector3.new(${part.size.map(v => Math.max(v, MIN_PART_STUDS)).join(', ')})`,
+        fix: `${luauPath(part.segments)}.Size = Vector3.new(${part.size.map(v => Math.max(v, MIN_PART_STUDS)).join(', ')})`,
       });
     } else if (largest > MAX_PART_STUDS) {
       sizeFindings.push({
@@ -346,7 +456,7 @@ export function analyzeParts(params: {
         instance: part.path,
         observed: `size (${fmt(part.size)})`,
         expected: `no axis over ${String(MAX_PART_STUDS)} studs`,
-        fix: `shrink ${luauPath(part.path)}; a coordinate was probably mistyped`,
+        fix: `shrink ${luauPath(part.segments)}; a coordinate was probably mistyped`,
       });
     } else if (largest / smallest > MAX_ASPECT_RATIO) {
       sizeFindings.push({
@@ -354,7 +464,7 @@ export function analyzeParts(params: {
         instance: part.path,
         observed: `size (${fmt(part.size)}), aspect ratio ${String(Math.round(largest / smallest))}`,
         expected: `aspect ratio under ${String(MAX_ASPECT_RATIO)}`,
-        fix: `thicken ${luauPath(part.path)} — at this ratio it renders as a line`,
+        fix: `thicken ${luauPath(part.segments)} — at this ratio it renders as a line`,
       });
     }
   }
@@ -365,7 +475,13 @@ export function analyzeParts(params: {
   // a platform laid at ground level shares space with it by construction, and
   // flagging that would fire on every well-built scene the kit produces.
   const solid = parts.filter(part => isStyled(part) && part.role !== GROUND_ROLE);
-  const boxes = solid.map(part => ({ part, box: worldAabb(part) }));
+  // Only parts whose bounding box IS the part. Two disjoint parts rotated off
+  // the axes can share a bounding box, so including them would tell the agent
+  // to move geometry that is fine — and a check that fires on a correct scene
+  // is worse than one with a stated scope. Every kit constructor lands here.
+  const checkable = solid.filter(part => isAxisAligned(part.rot));
+  const skippedRotated = solid.length - checkable.length;
+  const boxes = checkable.map(part => ({ part, box: worldAabb(part) }));
   const overlapFindings: DesignFinding[] = [];
   for (let i = 0; i < boxes.length; i += 1) {
     for (let j = i + 1; j < boxes.length; j += 1) {
@@ -385,7 +501,7 @@ export function analyzeParts(params: {
         expected: pickup
           ? 'a pickup must sit clear of solid geometry or the player cannot reach it'
           : `under ${String(Math.round(threshold * 100))}% shared volume`,
-        fix: `move ${luauPath(a.part.path)} clear of ${b.part.path}, or shrink one of them`,
+        fix: `move ${luauPath(a.part.segments)} clear of ${b.part.path}, or shrink one of them`,
       });
     }
   }
@@ -439,18 +555,31 @@ export function analyzeParts(params: {
   }
 
   // -- lighting --------------------------------------------------------------
+  //
+  // An Atmosphere alone is not evidence that anyone styled the place — a stock
+  // place can carry one for unrelated reasons. The sun has to have been moved
+  // too, which is what the collected Brightness and ClockTime are for.
   const lightingFindings: DesignFinding[] = [];
-  if (!lighting.atmosphere) {
+  const sunMoved =
+    Math.abs(lighting.brightness - STOCK_BRIGHTNESS) > STOCK_EPSILON ||
+    STOCK_CLOCK_TIMES.every(stock => Math.abs(lighting.clockTime - stock) > STOCK_EPSILON);
+  if (!lighting.atmosphere || !sunMoved) {
     lightingFindings.push({
       check: 'scene_lighting',
       instance: '<Lighting>',
-      observed: `no Atmosphere, Brightness ${String(lighting.brightness)}, ClockTime ${String(lighting.clockTime)}`,
+      observed: `${lighting.atmosphere ? 'an Atmosphere, but' : 'no Atmosphere;'} Brightness ${String(lighting.brightness)} and ClockTime ${String(lighting.clockTime)} are what a new place ships with`,
       expected: 'a styled sky: default Lighting renders every scene flat',
       fix: 'kit.scene()',
     });
   }
 
   const checks: DesignCheck[] = [
+    check(
+      'authored_content',
+      'something was actually built: a gate an empty world passes is not a gate',
+      parts.length,
+      authoredFindings,
+    ),
     check(
       'palette_adherence',
       'every visible part is one of the kit palette colours',
@@ -467,8 +596,10 @@ export function analyzeParts(params: {
     check('size_sanity', 'no degenerate, absurd or sliver-thin parts', parts.length, sizeFindings),
     check(
       'no_interpenetration',
-      'no part is buried inside another beyond a touching tolerance',
-      solid.length,
+      `no part is buried inside another beyond a touching tolerance; only axis-aligned parts are checked, because two disjoint rotated parts can share a bounding box${
+        skippedRotated > 0 ? ` (${String(skippedRotated)} rotated part(s) not checked)` : ''
+      }`,
+      checkable.length,
       overlapFindings,
     ),
     check('variety', 'the scene is not one colour and one size', varietyParts.length, varietyFindings),
@@ -478,6 +609,7 @@ export function analyzeParts(params: {
   return {
     root,
     parts: parts.length,
+    authoredParts: authored.length,
     kitParts: parts.filter(part => typeof part.role === 'string' && part.role.length > 0).length,
     handRolled: parts.filter(part => !part.role).length,
     stats,
@@ -505,13 +637,16 @@ if not root then return HttpService:JSONEncode({ ok = false, reason = "root not 
 
 local parts = {}
 
-local function walk(inst, prefix)
+local function walk(inst, prefix, segments)
 	for _, child in inst:GetChildren() do
 		local path = prefix == "" and child.Name or (prefix .. "/" .. child.Name)
+		local childSegments = table.clone(segments)
+		table.insert(childSegments, child.Name)
 		if child:IsA("BasePart") then
 			local px, py, pz, r00, r01, r02, r10, r11, r12, r20, r21, r22 = child.CFrame:GetComponents()
 			table.insert(parts, {
 				path = path,
+				segments = childSegments,
 				class = child.ClassName,
 				color = { child.Color.R, child.Color.G, child.Color.B },
 				material = child.Material.Name,
@@ -523,11 +658,11 @@ local function walk(inst, prefix)
 				role = child:GetAttribute("KitRole"),
 			})
 		end
-		walk(child, path)
+		walk(child, path, childSegments)
 	end
 end
 
-walk(root, "")
+walk(root, "", {})
 
 return HttpService:JSONEncode({
 	ok = true,
@@ -568,7 +703,7 @@ export async function inspectDesign(session: StudioSession, root = SANDBOX): Pro
 export function renderDesignReport(report: DesignReport): string {
   const lines: string[] = [];
   lines.push(
-    `  ${report.root}: ${String(report.parts)} part(s), ${String(report.kitParts)} from the kit, ${String(report.handRolled)} hand-rolled`,
+    `  ${report.root}: ${String(report.parts)} part(s), ${String(report.authoredParts)} authored, ${String(report.kitParts)} from the kit, ${String(report.handRolled)} hand-rolled`,
   );
   lines.push(
     `  ${String(report.stats.distinctColors)} colour(s), ${String(report.stats.distinctSizes)} size(s), ${String(report.stats.distinctHeights)} height(s)`,

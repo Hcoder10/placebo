@@ -438,13 +438,34 @@ app.get('/health', (_req, res) => {
  * the same view and a watcher cannot tell which is which — the console showed
  * ten branches from three different runs at one point.
  */
-app.post('/api/reset', (_req, res) => {
+app.post('/api/reset', async (_req, res) => {
   for (const key of Object.keys(run.state.branches)) {
     delete run.state.branches[key];
   }
   for (const key of Object.keys(run.state.pending)) {
     delete run.state.pending[key];
   }
+
+  // Reset the world too, not just the dashboard.
+  //
+  // `kit.scene()` is the kit's one effect outside the sandbox root: it restyles
+  // the place's Lighting, and stashes the previous values on Lighting itself so
+  // they outlive the folder being destroyed. Dropping the folder without
+  // calling the restore would leave every later run -- and the user's own
+  // place -- on the kit's sky, which is a side effect nobody asked for and
+  // nobody would think to look for.
+  //
+  // It cannot affect a verdict either way: the lighting change is idempotent
+  // and identical across treatment and control. This is about not leaving
+  // someone's Studio altered.
+  try {
+    const active = await session();
+    await authoring.reset(active);
+    await active.luau(KIT_LIGHTING_RESTORE_LUAU);
+  } catch {
+    // A reset that cannot reach Studio still clears the dashboard.
+  }
+
   run.setStatus('idle', 'Idle');
   res.json({ ok: true });
 });

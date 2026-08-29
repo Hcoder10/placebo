@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { candidatesFor } from '../verifier/candidates.js';
-import { sampleCandidates } from './sample.js';
+import { candidateId, sampleCandidates } from './sample.js';
 import { evaluateTask, verifyBaseline } from '../verifier/evaluateTask.js';
 import { StudioSession } from '../verifier/studio.js';
 import { loadTask } from '../verifier/task.js';
@@ -228,9 +228,14 @@ async function main(): Promise<void> {
     // many fresh ones as the target will produce. The second source is what
     // makes the loop able to run again tomorrow.
     const authored = candidatesFor(task);
-    const known = new Set(
-      [...corpus.values()].filter(row => row.task === task.id).map(row => row.candidate),
-    );
+    // Identity is the code, so a sample that reproduces something already
+    // measured -- whether stored in an earlier turn or hand-authored and queued
+    // for this one -- is recognised rather than paid for again.
+    const known = new Set<string>();
+    for (const row of corpus.values()) {
+      if (row.task === task.id) known.add(candidateId(row.completion));
+    }
+    for (const candidate of authored) known.add(candidateId(candidate.luau));
     const sampled = await sampleCandidates({
       endpoint: SAMPLE_ENDPOINT,
       model: SAMPLE_MODEL,

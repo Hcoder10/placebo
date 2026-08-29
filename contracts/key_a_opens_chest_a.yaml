@@ -1,0 +1,81 @@
+# Why this mechanic needs two contracts rather than one.
+#
+# `non_effects` is differential: a key is reported as collateral only when the
+# treatment and a control disagree about it. That makes it unable to express an
+# absolute invariant, and the gap is not hypothetical. Written as one contract
+# -- treatment KeyA, with controls `never_uses` AND `uses_other_key` -- an
+# implementation that opens ChestB on *any* key slips through: ChestB differs
+# from `never_uses` but agrees with `uses_other_key`, the two controls disagree,
+# and a key the controls disagree about is dropped rather than counted against
+# the patch. The bug becomes invisible precisely because it is indiscriminate.
+#
+# Splitting it fixes that without weakening anything. Each contract fires one
+# key against controls that never touch the other chest, so every wrong
+# behaviour shows up as a genuine difference:
+#
+#   opens everything on any key  -> ChestB moves here but not in the control
+#   opens ChestA on any key      -> the symmetric contract's effect never fires
+#   opens nothing                -> the effect never fires
+#
+# Found by Qodo on PR #3. The single-contract version passed its own audit and
+# its reference implementation, which is a good reminder that a contract can be
+# well-formed, non-trivial, and still fail to say what you meant.
+
+id: key_a_opens_chest_a
+requirement: >-
+  Using KeyA unlocks ChestA and leaves ChestB locked. Using nothing, or an unrelated signal, leaves both locked.
+
+setup: |
+  local use = Instance.new("BindableEvent")
+  use.Name = "Use"
+  use.Parent = sandbox
+
+  -- A real but irrelevant signal, so "ignores the wrong key" is distinguishable
+  -- from "ignores everything". Built here rather than in a control, so no
+  -- control differs structurally from the treatment.
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
+  -- Two chests, so "unlocked the right one" is distinguishable from "unlocked
+  -- everything". A mechanic that opens every chest satisfies a single-chest
+  -- contract perfectly well, which is exactly the bug this pairing catches.
+  local chestA = Instance.new("Part")
+  chestA.Name = "ChestA"
+  chestA.Anchored = true
+  chestA:SetAttribute("Locked", true)
+  chestA:SetAttribute("KeyId", "KeyA")
+  chestA.Parent = sandbox
+
+  local chestB = Instance.new("Part")
+  chestB.Name = "ChestB"
+  chestB.Anchored = true
+  chestB:SetAttribute("Locked", true)
+  chestB:SetAttribute("KeyId", "KeyB")
+  chestB.Parent = sandbox
+
+treatment: |
+  for _ = 1, REALIZATION do
+    sandbox.Use:Fire("KeyA")
+  end
+
+controls:
+  - name: never_uses
+    steps: |
+      -- same world, same elapsed setup, no key is ever used
+
+  - name: unrelated_signal
+    steps: |
+      for _ = 1, REALIZATION do
+        sandbox.Decoy:Fire("KeyA")
+      end
+
+effects:
+  - key: "ChestA.@Locked"
+    change: "true->false"
+
+non_effects:
+  - "ChestB.@Locked"
+
+# Repeated use must not re-open or toggle an already-open chest.
+realizations: [1, 2]

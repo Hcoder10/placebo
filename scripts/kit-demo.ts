@@ -1,6 +1,6 @@
-import { StudioSession } from './src/verifier/studio.js';
-import { withKit } from './src/verifier/kit.js';
-import { inspectDesign, renderDesignReport } from './src/verifier/design.js';
+import { StudioSession } from '../src/verifier/studio.js';
+import { withKit } from '../src/verifier/kit.js';
+import { inspectDesign, renderDesignReport } from '../src/verifier/design.js';
 
 const session = new StudioSession();
 await session.connect();

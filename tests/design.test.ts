@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_FINDINGS_PER_CHECK,
+  OVERLAP_FRACTION,
   analyzeParts,
+  isAxisAligned,
   overlapFraction,
   renderDesignReport,
   toRgb255,
@@ -29,6 +31,7 @@ function rgb01(name: string): PartRecord['color'] {
 
 function part(overrides: Partial<PartRecord> & { path: string }): PartRecord {
   return {
+    segments: overrides.path.split('/'),
     class: 'Part',
     color: rgb01('sand'),
     material: 'Concrete',
@@ -118,6 +121,15 @@ describe('bounding boxes', () => {
     expect(box.max[0] - box.min[0]).toBeCloseTo(3);
     expect(box.max[1] - box.min[1]).toBeCloseTo(3);
     expect(box.max[2] - box.min[2]).toBeCloseTo(0.5);
+  });
+});
+
+describe('axis alignment', () => {
+  it('accepts identity and quarter turns, rejects anything between', () => {
+    expect(isAxisAligned(IDENTITY)).toBe(true);
+    expect(isAxisAligned(YAW90)).toBe(true);
+    const c = Math.SQRT1_2;
+    expect(isAxisAligned([c, 0, c, 0, 1, 0, -c, 0, c])).toBe(false);
   });
 });
 
@@ -287,6 +299,47 @@ describe('interpenetration', () => {
     expect(checkOf(report, 'no_interpenetration').inspected).toBe(1);
   });
 
+  it('leaves rotated parts alone, because their bounding boxes lie', () => {
+    // Two 6x1x0.5 bars at +45 and -45 degrees, crossing at right angles with
+    // 0.43 studs of clear air between them. They do not touch, but their
+    // axis-aligned bounding boxes share 17% of a bar's volume — so the
+    // bounding-box test alone would tell the agent to move working geometry.
+    const yaw = (degrees: number): PartRecord['rot'] => {
+      const c = Math.cos((degrees * Math.PI) / 180);
+      const sn = Math.sin((degrees * Math.PI) / 180);
+      return [c, 0, sn, 0, 1, 0, -sn, 0, c];
+    };
+    const a = part({ path: 'BarA', size: [6, 1, 0.5], pos: [0, 0, 0], rot: yaw(45) });
+    const b = part({ path: 'BarB', size: [6, 1, 0.5], pos: [2.6, 0, 2.6], rot: yaw(-45) });
+
+    // The false positive is real: the boxes do overlap even though the parts do not.
+    expect(overlapFraction(worldAabb(a), worldAabb(b))).toBeGreaterThan(OVERLAP_FRACTION);
+
+    const report = analyzeParts({ root: 'r', parts: [a, b], lighting: STYLED });
+    const overlap = checkOf(report, 'no_interpenetration');
+    expect(overlap.pass).toBe(true);
+    expect(overlap.inspected).toBe(0);
+    expect(overlap.note).toContain('2 rotated part(s) not checked');
+  });
+
+  it('still checks the quarter-turn the kit actually uses', () => {
+    // kit.coin is yawed 90 degrees, which maps its axes onto world axes — the
+    // bounding box is the part, so the test stays exact.
+    const coin = part({
+      path: 'Coin',
+      role: 'coin',
+      color: rgb01('gold'),
+      material: 'Neon',
+      size: [0.5, 3, 3],
+      rot: YAW90,
+      pos: [0, 1, 0],
+      collide: false,
+    });
+    const report = analyzeParts({ root: 'r', parts: [platform, coin], lighting: STYLED });
+    expect(checkOf(report, 'no_interpenetration').inspected).toBe(2);
+    expect(checkOf(report, 'no_interpenetration').pass).toBe(false);
+  });
+
   it('ignores invisible volumes, which are meant to sit inside geometry', () => {
     const trigger = part({ path: 'Trigger', size: [4, 4, 4], pos: [0, -0.5, 0], transparency: 1, collide: false });
     const report = analyzeParts({ root: 'r', parts: [platform, trigger], lighting: STYLED });
@@ -336,6 +389,110 @@ describe('size sanity', () => {
   });
 });
 
+describe('authored content', () => {
+  const ground = part({
+    path: 'Ground',
+    role: 'ground',
+    color: rgb01('moss'),
+    material: 'Grass',
+    size: [96, 2, 96],
+    pos: [0, -1, 0],
+  });
+
+  it('does not count the ground plane the bootstrap supplies', () => {
+    // withKit runs kit.ground on every world step, so a world containing only
+    // the floor is a world where the agent built nothing.
+    const report = analyzeParts({ root: 'r', parts: [ground], lighting: STYLED });
+    expect(report.authoredParts).toBe(0);
+    expect(checkOf(report, 'authored_content').pass).toBe(false);
+    expect(checkOf(report, 'authored_content').findings[0]?.observed).toContain('only geometry is the ground');
+    expect(report.passed).toBe(false);
+  });
+
+  it('is satisfied by one authored part, and says so in the report', () => {
+    const report = analyzeParts({
+      root: 'r',
+      parts: [ground, part({ path: 'Platform', role: 'platform', size: [16, 1, 16], pos: [0, -0.5, 0] })],
+      lighting: STYLED,
+    });
+    expect(report.authoredParts).toBe(1);
+    expect(report.passed).toBe(true);
+    expect(renderDesignReport(report)).toContain('2 part(s), 1 authored');
+  });
+});
+
+describe('repair paths', () => {
+  function fixFor(name: string): string {
+    const report = analyzeParts({
+      root: 'r',
+      // Off-palette, so the palette check produces a finding to read the path from.
+      parts: [part({ path: `Room/${name}`, color: [0.1, 0.9, 0.2] })],
+      lighting: STYLED,
+    });
+    return checkOf(report, 'palette_adherence').findings[0]?.fix ?? '';
+  }
+
+  it('uses dot notation only where the name is a legal identifier', () => {
+    expect(fixFor('Door')).toBe('kit.tint(sandbox.Room.Door, "moss")');
+  });
+
+  it('brackets a name that cannot follow a dot', () => {
+    // All three are legal Roblox names and none of them parses after a dot.
+    expect(fixFor('My Door')).toBe('kit.tint(sandbox.Room["My Door"], "moss")');
+    expect(fixFor('end')).toBe('kit.tint(sandbox.Room["end"], "moss")');
+    expect(fixFor('Coin#2')).toBe('kit.tint(sandbox.Room["Coin#2"], "moss")');
+    expect(fixFor('2Fast')).toBe('kit.tint(sandbox.Room["2Fast"], "moss")');
+  });
+
+  it('escapes a name that would otherwise close the string', () => {
+    expect(fixFor('say "hi"')).toBe('kit.tint(sandbox.Room["say \\"hi\\""], "moss")');
+  });
+
+  it('does not lose a name containing the path separator', () => {
+    // `path` joins on "/", so splitting it back apart would produce two
+    // instances that do not exist. The segments are carried instead.
+    const report = analyzeParts({
+      root: 'r',
+      parts: [{ ...part({ path: 'A/B' }), segments: ['A/B'], color: [0.1, 0.9, 0.2] }],
+      lighting: STYLED,
+    });
+    expect(checkOf(report, 'palette_adherence').findings[0]?.fix).toBe('kit.tint(sandbox["A/B"], "moss")');
+  });
+});
+
+describe('scene lighting', () => {
+  it('is not satisfied by an Atmosphere over a stock sky', () => {
+    // Qodo's case: a place nobody styled that happens to carry an Atmosphere.
+    for (const clockTime of [14, 14.5]) {
+      const report = analyzeParts({
+        root: 'r',
+        parts: kitScene(),
+        lighting: { atmosphere: true, brightness: 2, clockTime },
+      });
+      expect(checkOf(report, 'scene_lighting').pass).toBe(false);
+      expect(checkOf(report, 'scene_lighting').findings[0]?.observed).toContain('an Atmosphere, but');
+    }
+  });
+
+  it('accepts an Atmosphere over a sky somebody moved', () => {
+    const report = analyzeParts({
+      root: 'r',
+      parts: kitScene(),
+      lighting: { atmosphere: true, brightness: 2.6, clockTime: 15.5 },
+    });
+    expect(checkOf(report, 'scene_lighting').pass).toBe(true);
+  });
+
+  it('still fails when the sun moved but nothing was added to the sky', () => {
+    const report = analyzeParts({
+      root: 'r',
+      parts: kitScene(),
+      lighting: { atmosphere: false, brightness: 2.6, clockTime: 15.5 },
+    });
+    expect(checkOf(report, 'scene_lighting').pass).toBe(false);
+  });
+});
+
 describe('colour conversion', () => {
   it('round-trips a palette entry exactly', () => {
     for (const entry of PALETTE) {
@@ -355,9 +512,13 @@ describe('the rendered report', () => {
     expect(text).toContain('design rejected');
   });
 
-  it('accepts an empty world rather than inventing findings about it', () => {
+  it('rejects an empty world instead of passing it vacuously', () => {
+    // Every other check is a statement about parts, so a world with none
+    // satisfies all of them. An agent could clear the design gate by building
+    // nothing, which is the same hole validate.ts closes for contracts.
     const report = analyzeParts({ root: 'r', parts: [], lighting: STYLED });
-    expect(report.passed).toBe(true);
-    expect(renderDesignReport(report)).toContain('design accepted');
+    expect(checkOf(report, 'authored_content').pass).toBe(false);
+    expect(report.passed).toBe(false);
+    expect(renderDesignReport(report)).toContain('design rejected');
   });
 });

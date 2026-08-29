@@ -9,6 +9,10 @@ setup: |
   use.Name = "Use"
   use.Parent = sandbox
 
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
   local chestA = Instance.new("Part")
   chestA.Name = "ChestA"
   chestA.Anchored = true
@@ -39,7 +43,8 @@ baseline: |
   end)
 
 contracts:
-  - ../contracts/key_unlocks_matching_chest.yaml
+  - ../contracts/key_a_opens_chest_a.yaml
+  - ../contracts/key_b_opens_chest_b.yaml
 
 # Nothing is satisfied yet -- that is what makes this a repair rather than an
 # extension.

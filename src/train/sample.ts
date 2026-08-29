@@ -116,6 +116,28 @@ function implausible(luau: string): string | null {
   return null;
 }
 
+/**
+ * The identity of a candidate is its code, normalised.
+ *
+ * Exported because the caller has to compute it over rows it already holds --
+ * the corpus, and the hand-authored candidates queued for this same turn. An
+ * earlier version compared only against previously stored *ids*, so when the
+ * model happened to reproduce a hand-authored implementation exactly, the two
+ * identical programs carried different ids and were both evaluated and stored.
+ * That is engine time spent twice on one experiment, and a duplicate row that
+ * silently doubles that program's weight in the preference data.
+ *
+ * Trailing whitespace and line endings are normalised out. A patch is not a
+ * different patch because it arrived over a different platform's newline.
+ */
+export function candidateId(luau: string): string {
+  const normalised = luau
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .trim();
+  return `sampled-${createHash('sha1').update(normalised).digest('hex').slice(0, 10)}`;
+}
+
 export interface SampleParams {
   endpoint: string;
   model: string;
@@ -123,7 +145,13 @@ export interface SampleParams {
   prompt: string;
   count?: number;
   temperature?: number;
-  /** Ids already in the corpus, so a re-run does not pay to re-evaluate them. */
+  /**
+   * Identities already accounted for, from `candidateId`.
+   *
+   * Must cover both what the corpus already holds and the hand-authored
+   * candidates being evaluated this same turn -- otherwise a sample that
+   * reproduces one of them is paid for twice.
+   */
   known?: ReadonlySet<string>;
 }
 
@@ -262,7 +290,7 @@ export async function sampleCandidates(params: SampleParams): Promise<SampleRepo
       continue;
     }
 
-    const id = `sampled-${createHash('sha1').update(luau).digest('hex').slice(0, 10)}`;
+    const id = candidateId(luau);
     if (seen.has(id) || known.has(id)) {
       duplicates += 1;
       continue;
