@@ -71,7 +71,7 @@ door_opens_immediately REJECT   missing door_opens_at_three
 > bought off with a smaller patch. And the third is caught by the *control*: with
 > two collects the door is already open, so nothing is attributable to the third."
 
-## 2:20 — It builds something worth looking at
+## 2:15 — It builds something worth looking at
 
 ```bash
 npx tsx scripts/kit-demo.ts
@@ -118,7 +118,7 @@ Be precise about the limit:
 > — all checkable. Whether the level is *fun* is not, and we are not claiming a
 > number for it."
 
-## 2:35 — Watch a game get built
+## 2:45 — Watch a game get built
 
 ```bash
 npm run build:game
@@ -149,7 +149,50 @@ Say what it is, plainly:
 > running. What's doing the work here is the verifier deciding which candidate
 > earns its place, and that part is real."
 
-## 2:40 — Where the data comes from
+## 3:10 — Then actually play it
+
+```bash
+npm run playable
+```
+
+```
+  extend_door: installing adds_door_keeps_coin
+  {"ok":true,"counts":{"coin":1,"door":1},"playBytes":5865}
+  press Play in Studio and walk into a coin
+```
+
+Press **F5**. Walk forward with W, two hops up to the ledge, and walk into the
+coin. The board reads `Scoreboard: 1`. Collect it three times and the door at
+the end of the ledge fades and lets you through. **Shift+F5** to stop.
+
+Say what just happened, because the split is the whole idea:
+
+> "The contract proved one thing: *when the Collect event fires*, the score
+> rises by exactly one and the coin is destroyed — and that it wouldn't have
+> happened otherwise. That's a claim about the mechanic, and it's the claim a
+> launch test can't make."
+
+> "What it deliberately doesn't include is the input device. Making it playable
+> attaches a physical Touched to the *same event* that was already proven to
+> cause the effect. It isn't a second implementation and it doesn't weaken the
+> verified claim."
+
+The step is separate from the build on purpose:
+
+> "This installs Scripts, and the world snapshotter watches `Source`. A Script
+> sitting in the sandbox during verification would be observed as an effect of
+> whatever patch was under test. So the play layer goes on after."
+
+If you want one more beat, this is the honest one:
+
+> "The first version of this installed every task's accepted mechanic, which
+> wired two handlers to the same event. It worked — because Roblox happened to
+> dispatch them in a lucky order. Reversed, the door silently stopped opening.
+> And every contract still passed, because verification never installs two
+> implementations at once. We caught it by running it three ways and looking,
+> which is exactly the argument we're making about launch tests, arriving at
+> our own expense."
+## 3:45 — Where the data comes from
 
 ```bash
 npx tsx src/bright/cli.ts --break --repair
@@ -175,7 +218,7 @@ npx tsx src/bright/cli.ts --break --adjudicate
 > "Then the live engine rules on what we scraped. Three of four claims are wrong,
 > each for a different reason. **The web proposes; the engine decides.**"
 
-## 3:40 — The loop closes
+## 4:10 — The loop closes
 
 ```bash
 curl http://100.79.153.43:8000/v1/models    # -> gpt-oss-20b, placebo
@@ -192,7 +235,7 @@ Be first to say the caveat:
 > claim — at that size, separating the training set is trivial. What's
 > demonstrated is that every label came from a live engine."
 
-## 4:20 — What we're not claiming
+## 4:35 — What we're not claiming
 
 > "Realizations vary repetition, not scheduling — so this isn't evidence about
 > replication timing. We didn't invent DFlash and didn't train a draft model; we
@@ -201,7 +244,7 @@ Be first to say the caveat:
 > the prior work and states the actual difference: it varies the verifier in the
 > training loop, we vary the interaction inside a single evaluation."
 
-## 4:45 — Close
+## 4:50 — Close
 
 > "An agent that writes code is easy now. An agent you'd give write access to has
 > to prove its fix *caused* the fix. Run it twice, change one thing, look at the
