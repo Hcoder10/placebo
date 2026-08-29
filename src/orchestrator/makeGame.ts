@@ -39,6 +39,13 @@ Build a small Roblox game. Work in this order and call one tool at a time.
 Every tool lives on the MCP server named "placebo-tools". Whenever a call needs
 an mcp_server argument, it is exactly "placebo-tools" -- never anything else.
 
+Keep every tool call SHORT: at most 8 lines of Luau per call. Make several
+small calls instead of one big one. Long arguments come out as broken JSON and
+the call is lost.
+
+Pass a tool's own fields directly. Do not nest them inside another "input" or
+"tool_name" wrapper -- that wrapper belongs to call_tool, not to the tool.
+
 1. world_build — build the space. \`sandbox\` and \`kit\` are in scope; lighting
    and ground are already there. Use the kit, not Instance.new:
      kit.platform(sandbox, x, y, z, width, depth)
@@ -51,10 +58,16 @@ an mcp_server argument, it is exactly "placebo-tools" -- never anything else.
 
 2. design_check — fix anything it reports, then check again.
 
-3. contract_propose — one mechanic:
-     treatment "sandbox.Collect:Fire()"   control "-- nothing"
-     effects "Score.@Points:+1, exists:Coin:true->false"
-     non_effects "Other.@Points"          reference <your Luau>
+3. contract_propose — one mechanic. ALL of these fields are required:
+     {
+       "id": "coin_awards_once",
+       "requirement": "Collecting the coin adds one point and removes the coin.",
+       "treatment": "sandbox.Collect:Fire()",
+       "control": "-- nothing happens",
+       "effects": "Scoreboard.@Coins:+1, exists:Coin:true->false",
+       "non_effects": "OtherScoreboard.@Coins",
+       "reference": "sandbox.Collect.Event:Connect(function() ... end)"
+     }
    The treatment fires the trigger; the implementation reacts to it. A contract
    satisfied by no implementation is rejected.
 
