@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "verify": "tsx src/verifier/cli.ts",
+    "flywheel": "tsx src/train/continual.ts",
     "build:game": "tsx src/verifier/buildGame.ts",
     "make:game": "tsx src/orchestrator/makeGame.ts",
     "mcp": "tsx src/mcp/server.ts",

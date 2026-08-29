@@ -1,0 +1,1 @@
+{"turn":2,"at":"2026-08-29T20:42:49.670Z","id":"migrate_humanoid_health","goal":"Replace Humanoid.Health with Humanoid.MaxHealth, keeping the behaviour identical.","deprecated":"Humanoid.Health","replacement":"Humanoid.MaxHealth","evidence":"Humanoid.Health and Humanoid.MaxHealth both resolve in this engine"}
