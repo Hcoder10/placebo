@@ -8,6 +8,7 @@ import { loadContract } from '../verifier/contract.js';
 import { auditContract } from '../verifier/validate.js';
 import { evaluate } from '../verifier/effect.js';
 import { StudioSession } from '../verifier/studio.js';
+import { Authoring } from './authoring.js';
 import { Run, scorePrediction } from './runstate.js';
 
 /**
@@ -26,6 +27,9 @@ const CONTRACT_PATH = process.env.PLACEBO_CONTRACT ?? join(ROOT, 'contracts', 'c
 
 const contract = loadContract(CONTRACT_PATH);
 const run = new Run(`run-${String(Date.now())}`, contract.id, join(ROOT, 'runs', 'run.jsonl'));
+
+/** Worlds and specs the agent authors itself, for build-a-game-from-a-request. */
+const authoring = new Authoring('PlaceboSandbox');
 
 // One Studio session for the process. Connected lazily so the MCP server can
 // start before Studio does.
@@ -139,10 +143,16 @@ function buildServer(): McpServer {
       title: 'Run the experiment',
       description:
         'Runs your patch against the treatment and every matched control, across all realizations, and returns what it actually caused.',
-      inputSchema: { branch: z.string() },
+      inputSchema: {
+        branch: z.string(),
+        contract_id: z
+          .string()
+          .default('')
+          .describe('A contract you proposed. Defaults to the contract this server was started with.'),
+      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
-    async ({ branch }) => {
+    async ({ branch, contract_id }) => {
       const candidate = run.state.branches[branch];
       if (!candidate?.patchLuau) {
         return text({ error: `branch ${branch} has not proposed a patch yet` });
@@ -152,9 +162,16 @@ function buildServer(): McpServer {
         return text({ error: `branch ${branch} must call predict_effect before verifying` });
       }
 
+      // A proposed contract, when one is named, else the contract this server
+      // was started with. Only audited proposals are ever in the map.
+      const proposed = contract_id ? authoring.get(contract_id) : undefined;
+      if (contract_id && !proposed) {
+        return text({ error: `no audited contract named ${contract_id}; propose it first` });
+      }
+
       const verdict = await evaluate({
         session: await session(),
-        contract,
+        contract: proposed?.contract ?? contract,
         patchLuau: candidate.patchLuau,
       });
       run.recordVerdict(branch, verdict);
@@ -175,6 +192,95 @@ function buildServer(): McpServer {
         prediction_missed: prediction.missed,
       });
     },
+  );
+
+  server.registerTool(
+    'world_build',
+    {
+      title: 'Create objects in the game world',
+      description:
+        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` is in scope. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
+      inputSchema: {
+        luau: z.string().describe('Luau that builds part of the world. `sandbox` is in scope.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ luau }) => text(await authoring.build(await session(), luau)),
+  );
+
+  server.registerTool(
+    'contract_propose',
+    {
+      title: 'Propose a behavioural contract',
+      description:
+        'Submit a contract describing one mechanic: the interaction, matched controls, and the effects it must cause. It is audited before it is kept — a contract satisfied with no implementation at all is rejected. Supply the implementation you believe satisfies it.',
+      // Flat strings, not nested arrays of objects.
+      //
+      // The structured form is what the verifier wants, and it is also what a
+      // 20B model reliably fails to emit across a long tool sequence. Accepting
+      // "Score.@Points:+1, exists:Coin:true->false" and parsing it here moved
+      // this tool from unusable to usable without weakening anything: the
+      // parsed result goes through the identical audit.
+      inputSchema: {
+        id: z.string().describe('Short identifier, e.g. coin_awards_once'),
+        requirement: z.string().describe('The requirement in one or two sentences'),
+        treatment: z.string().describe('Luau firing the interaction under test'),
+        control: z
+          .string()
+          .describe('Luau for a matched control: the SAME world where the interaction does NOT happen. May be a comment.'),
+        effects: z
+          .string()
+          .describe('Comma-separated key:change pairs, e.g. "Score.@Points:+1, exists:Coin:true->false"'),
+        non_effects: z.string().default('').describe('Comma-separated keys that must not move'),
+        reference: z.string().describe('The implementation you believe satisfies this contract'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ reference, control, effects, non_effects, ...rest }) => {
+      const parsedEffects = effects
+        .split(',')
+        .map(entry => entry.trim())
+        .filter(Boolean)
+        .map(entry => {
+          // Split on the LAST colon: a key may contain one (exists:Coin), the
+          // change never does.
+          const at = entry.lastIndexOf(':');
+          return at === -1
+            ? { key: entry, change: '' }
+            : { key: entry.slice(0, at).trim(), change: entry.slice(at + 1).trim() };
+        });
+
+      const draft = {
+        ...rest,
+        controls: [{ name: 'no_interaction', steps: control }],
+        effects: parsedEffects,
+        non_effects: non_effects.split(',').map(entry => entry.trim()).filter(Boolean),
+        realizations: [1],
+      };
+
+      return text(await authoring.propose({ session: await session(), draft, reference }));
+    },
+  );
+
+  server.registerTool(
+    'contract_list',
+    {
+      title: 'List proposed contracts',
+      description: 'Contracts proposed so far, whether each survived its audit, and whether a human has approved it.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    () =>
+      text({
+        world_steps: authoring.worldStepCount(),
+        contracts: authoring.all().map(proposal => ({
+          id: proposal.contract.id,
+          requirement: proposal.contract.requirement,
+          usable: proposal.audit.usable,
+          approved: proposal.approved,
+          notes: proposal.audit.notes,
+        })),
+      }),
   );
 
   server.registerTool(
@@ -306,10 +412,27 @@ app.post('/api/reset', (_req, res) => {
 });
 
 /** The console reads this; it is the same object the tools write to. */
+/** Approve a proposed contract. The one step that needs a person. */
+app.post('/api/contracts/:id/approve', (req, res) => {
+  const ok = authoring.approve(req.params.id);
+  res.status(ok ? 200 : 404).json(ok ? { ok: true } : { error: 'no such proposed contract' });
+});
+
 app.get('/api/state', (_req, res) => {
   res.setHeader('access-control-allow-origin', '*');
   res.json({
     ...run.state,
+    authored: {
+      worldSteps: authoring.worldStepCount(),
+      contracts: authoring.all().map(proposal => ({
+        id: proposal.contract.id,
+        requirement: proposal.contract.requirement,
+        usable: proposal.audit.usable,
+        approved: proposal.approved,
+        notes: proposal.audit.notes,
+        problems: proposal.audit.problems,
+      })),
+    },
     contract: {
       id: contract.id,
       requirement: contract.requirement,
