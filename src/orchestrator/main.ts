@@ -68,6 +68,9 @@ async function cmdRun(branches: number): Promise<void> {
     throw new Error('no model provider configured on the TrueForge server');
   }
 
+  // Start from an empty board so the console shows this run and not the last one.
+  await fetch(`${MCP_HOST}/api/reset`, { method: 'POST' }).catch(() => undefined);
+
   const { data: session } = await tf.sessions.create({
     agent: { spec: parentAgentSpec({ model: MODEL, branches }) as never },
   });

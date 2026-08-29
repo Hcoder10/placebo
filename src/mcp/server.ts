@@ -255,6 +255,24 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, contract: contract.id, studio: studio !== null });
 });
 
+/**
+ * Clears the run so a fresh experiment starts from an empty board.
+ *
+ * Without this, seeded fixture branches and model-authored branches pile up in
+ * the same view and a watcher cannot tell which is which — the console showed
+ * ten branches from three different runs at one point.
+ */
+app.post('/api/reset', (_req, res) => {
+  for (const key of Object.keys(run.state.branches)) {
+    delete run.state.branches[key];
+  }
+  for (const key of Object.keys(run.state.pending)) {
+    delete run.state.pending[key];
+  }
+  run.setStatus('idle', 'Idle');
+  res.json({ ok: true });
+});
+
 /** The console reads this; it is the same object the tools write to. */
 app.get('/api/state', (_req, res) => {
   res.setHeader('access-control-allow-origin', '*');
