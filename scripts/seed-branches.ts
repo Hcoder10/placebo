@@ -46,7 +46,13 @@ const CONFIDENT = {
   unchanged: ['OtherScoreboard.@Coins'],
 };
 
-process.stdout.write(`\nseeding ${String(CANDIDATES.length)} branches through ${MCP}\n\n`);
+process.stdout.write(`\nseeding ${String(CANDIDATES.length)} branches through ${MCP}\n`);
+process.stdout.write(
+  `every branch submits the SAME hardcoded prediction, so the scores below measure the\n` +
+    `harness, not a model. They show the metric discriminates between a patch that works and\n` +
+    `patches that do not. They say nothing about any model's calibration until real subagents\n` +
+    `produce the predictions themselves.\n\n`,
+);
 
 for (const candidate of CANDIDATES) {
   const branch = candidate.id;
