@@ -63,6 +63,78 @@ unless the last two hold:
   fixed number of frames. A fixed guess silently reports a correct-but-slow
   patch as having caused nothing.
 
+### The same treatment, applied to how it looks
+
+Verified mechanics were not enough. A small model writing raw `Instance.new`
+gets exactly what that returns — plastic, default grey, four by one by two,
+wherever it guessed — so everything the system built was correct and ugly.
+
+The fix is the same argument pointed at appearance: do not ask the model to
+have taste, give it a substrate where the good outcome is the default, then
+verify the properties that are actually checkable. `kit` constructors carry a
+palette where colour means "this one matters", paired materials, grid-snapped
+placement, human-scaled proportion and a lighting rig. `design_check` measures
+what came out.
+
+```
+  PlaceboSandbox: 11 part(s), 10 authored, 11 from the kit, 0 hand-rolled
+  PASS  authored_content     a gate an empty world passes is not a gate
+  PASS  palette_adherence    every visible part is a kit palette colour
+  PASS  default_material_tell nothing still wears what Instance.new gave it
+  PASS  grid_alignment       positions sit on the 0.5-stud grid
+  PASS  size_sanity          no degenerate, absurd or sliver-thin parts
+  PASS  no_interpenetration  nothing buried inside anything else
+  PASS  variety              not one colour and one size
+  PASS  scene_lighting       the place is not on default Lighting
+```
+
+`authored_content` exists because Qodo found the hole: acceptance was "every
+check passed", and every check passes vacuously on an empty world, so an agent
+could satisfy the design gate by building nothing. That is the same failure the
+contract auditor already guards against on the correctness side — a contract
+satisfiable with no implementation at all is rejected as trivial. We had closed
+it in one place and left it open in the other.
+
+These measure properties, not taste. Whether a level is *fun* is not checkable
+and nothing here claims a number for it.
+
+### Speculative decoding, decomposed
+
+Enabling the released DFlash drafter made generation slower, and the obvious
+comparison charges all of that to speculation. It should not: loading a drafter
+requires two vLLM flags that remove optimisations the plain server enjoys. Three
+arms, every reading gated on an idle server:
+
+```
+  baseline   247.5 median tok/s    no flags, no drafter
+  control    254.0 median tok/s    both flags, no drafter
+  dflash     193.8 median tok/s    both flags + drafter
+
+  flags 1.010x  x  speculation 0.782x  =  0.790   vs measured combined 0.788
+```
+
+The flags cost nothing this setup can resolve; the drafter owns the whole
+regression. The split multiplying back to the whole is the check that it is one
+measurement rather than three unrelated ones.
+
+Adapting the drafter on 787 of the system's own traces then moved the metric it
+targets, and only that one:
+
+```
+  released   2.17 accepted length   14.6% acceptance   209.2 tok/s
+  adapted    2.44 accepted length   18.0% acceptance   212.1 tok/s
+```
+
++0.27 against a ±0.06 noise floor, measured by running the *same* released
+drafter twice before believing anything. Throughput did not follow, and that is
+the honest half of the result: the drafter got better at predicting the target
+and generation did not get faster, because on a GPU that is not
+bandwidth-starved verification was never the bottleneck.
+
+One thing that changes what the number means, stated where it cannot be missed:
+1641 of 1644 collected traces finish on `length` and all of them open on
+gpt-oss's `analysis` channel, so this is acceptance over the model's reasoning
+stream, not over Luau source.
 ### What the realizations do and do not show
 
 `realizations: [1, 2, 3]` fires the interaction a different number of times.
