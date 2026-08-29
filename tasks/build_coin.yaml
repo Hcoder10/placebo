@@ -1,0 +1,39 @@
+id: build_coin
+mode: build
+goal: >-
+  Nothing exists yet. Build the coin mechanic from scratch and prove that
+  collecting is what causes the score to move.
+
+setup: |
+  local coin = Instance.new("Part")
+  coin.Name = "Coin"
+  coin.Anchored = true
+  coin.Parent = sandbox
+
+  local board = Instance.new("Part")
+  board.Name = "Scoreboard"
+  board.Anchored = true
+  board:SetAttribute("Coins", 0)
+  board.Parent = sandbox
+
+  local other = Instance.new("Part")
+  other.Name = "OtherScoreboard"
+  other.Anchored = true
+  other:SetAttribute("Coins", 0)
+  other.Parent = sandbox
+
+  local collect = Instance.new("BindableEvent")
+  collect.Name = "Collect"
+  collect.Parent = sandbox
+
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
+# Nothing to start from. That is what `build` means.
+baseline: ""
+
+contracts:
+  - ../contracts/coin_awards_once.yaml
+
+already_satisfied: []

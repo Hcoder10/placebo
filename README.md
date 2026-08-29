@@ -91,7 +91,16 @@ npm run mcp                   # http://localhost:9400/
 
 # 4. Drive the full loop with no model in it (pipeline rehearsal)
 npx tsx scripts/seed-branches.ts
+
+# 5. Point the harness at a self-hosted model, then fan out for real
+npx tsx scripts/register-model.ts http://<host>:8000/v1 <model-id>
+npx tsx src/orchestrator/main.ts run 3
 ```
+
+Step 4 needs no model at all. It exercises `predict_effect`, `patch_propose`
+and `causal_verify` over the real MCP surface against a live Studio, and fills
+the console with real verdicts — so a model-serving problem cannot take the
+whole pipeline down with it.
 
 ## How it works
 
@@ -187,6 +196,95 @@ It returns `ok: true` regardless. A verifier built on it would silently compare 
 treatment against a control that started from a different world. Placebo rebuilds
 each condition's world from nothing instead — determinism by construction rather
 than by promise.
+
+## What is and is not novel
+
+Execution-gated training for game code already exists, and so does using a
+matched control to show a verifier is doing the work — see
+[RELATED.md](RELATED.md), written after checking rather than before.
+
+The difference is **what the control varies**. Prior work varies the *verifier*
+in the training loop, to ask whether the gain came from filter precision or from
+more data. Placebo varies the *interaction* inside a single evaluation, to ask
+whether a specific state change was caused by the player's action or was going to
+happen regardless. A launch gate accepts the reward hack in this repo; only a
+no-collect control rejects it.
+
+## The loop, closed
+
+The harness runs experiments; the experiments become training data; the trained
+model is served back to the harness behind the same URL.
+
+```
+  serve gpt-oss-20b  ──▶  agent runs experiments in Roblox  ──▶  verified arms
+        ▲                                                            │
+        └──────  vllm --lora placebo  ◀──  LoRA DPO  ◀───────────────┘
+```
+
+Measured end to end today:
+
+| step | result |
+| --- | --- |
+| Causal verification, live Studio | **7/7** candidates scored as expected, `iso` and `settled` true throughout |
+| Build from scratch | correct implementation accepted; 11 defects rejected |
+| Extend without regressing | correct accepted; a candidate that added the door and dropped the coin reported `BROKE coin_awards_once` |
+| Scraper self-repair | all 4 fields recovered after a site redesign, spec rewritten at revision 2 |
+| Engine adjudication | **3 of 4** scraped claims rejected, each for a distinct, specific reason |
+| Preference export | 25 pairs, 3 supervised examples — every label a measured causal difference |
+| LoRA DPO on gpt-oss-20b | train loss 0.39, 31.8 MB adapter |
+| Adapter served | one endpoint exposes `gpt-oss-20b` and `placebo` |
+
+**What these numbers are not.** The dataset is 25 pairs generated in an
+afternoon, and the training run took 30 seconds. `rewards/accuracies: 1.0`
+means the model separated its training set, which is trivially achievable at
+that size and says nothing about generalisation. What is demonstrated is that
+the pipeline runs end to end and that every label in it came from a live engine
+rather than from a judge model. The capability claim needs a dataset an order of
+magnitude larger, which is a matter of running it longer, not of building
+anything else.
+
+## Modes
+
+Three kinds of task, one mechanism. The only structural difference is which
+contracts must hold and what the agent starts from.
+
+```bash
+npx tsx src/verifier/taskCli.ts tasks/build_coin.yaml    # build from scratch
+npx tsx src/verifier/taskCli.ts tasks/extend_door.yaml   # add a feature, keep the old ones
+npm run verify                                            # repair a defect
+```
+
+`extend` is the interesting one. A candidate that adds a door while silently
+dropping the coin award reports `BROKE coin_awards_once` rather than scoring as a
+partial win, and ranking is lexicographic so a regression cannot be bought off
+with a smaller patch. A task must also *prove* its baseline satisfies what it
+claims before anything is scored against it.
+
+## Where the data comes from
+
+```bash
+npx tsx src/bright/cli.ts                        # scrape, extract, validate
+npx tsx src/bright/cli.ts --break                # simulate a site redesign
+npx tsx src/bright/cli.ts --break --repair       # recover fields by shape
+npx tsx src/bright/cli.ts --break --adjudicate   # let the engine rule on the claims
+```
+
+The scraper spec is a versioned file. When the page moves, fields are recovered
+by *shape* — each declares what a valid value looks like — with document order
+separating two fields that hold the same kind of value. The repair is written
+back with a bumped revision, so it arrives as a reviewable diff.
+
+Then the engine adjudicates. Of four scraped claims, three were wrong and were
+dropped for distinct reasons: an abstract class, a replacement that does not
+resolve, a deprecation that already completed. **The web proposes; the engine
+decides.**
+
+## Running it on one machine
+
+[DGX_SPARK.md](DGX_SPARK.md) works through serving, drafting and post-training
+co-resident in 128 GB of unified memory, and why a bandwidth-starved,
+compute-rich box is the case where speculative decoding stops being an
+optimisation and becomes the enabling technique.
 
 ## Layout
 
