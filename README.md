@@ -91,7 +91,16 @@ npm run mcp                   # http://localhost:9400/
 
 # 4. Drive the full loop with no model in it (pipeline rehearsal)
 npx tsx scripts/seed-branches.ts
+
+# 5. Point the harness at a self-hosted model, then fan out for real
+npx tsx scripts/register-model.ts http://<host>:8000/v1 <model-id>
+npx tsx src/orchestrator/main.ts run 3
 ```
+
+Step 4 needs no model at all. It exercises `predict_effect`, `patch_propose`
+and `causal_verify` over the real MCP surface against a live Studio, and fills
+the console with real verdicts — so a model-serving problem cannot take the
+whole pipeline down with it.
 
 ## How it works
 
