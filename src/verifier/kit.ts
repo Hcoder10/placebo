@@ -110,6 +110,7 @@ export const KIT_ROLES = [
   'wall',
   'door',
   'coin',
+  'chest',
   'hazard',
   'spawn',
   'decor',
@@ -361,6 +362,19 @@ ${paletteLuau()}
 		return coin
 	end
 
+	-- A container that reads as openable at a glance: waist-high, wooden, and
+	-- wider than it is deep, so it faces the player rather than sitting as a
+	-- neutral cube. Lockable mechanics are common enough in simple games to
+	-- earn a constructor rather than being hand-rolled every time.
+	function kit.chest(parent, x, y, z, name)
+		return make(parent, {
+			role = "chest", label = name or "Chest", tint = "clay",
+			material = Enum.Material.WoodPlanks,
+			sx = 4, sy = 3, sz = 3,
+			x = x, y = (y or 0) + 1.5, z = z,
+		})
+	end
+
 	function kit.hazard(parent, x, y, z, width, depth, name)
 		return make(parent, {
 			role = "hazard", label = name or "Hazard", tint = "ember",
@@ -485,6 +499,7 @@ it handles colour, material, proportion, grid alignment and lighting for you.
   kit.wall(sandbox, x, y, z, length, axis, name)      -- axis "x" or "z", 8 studs tall
   kit.door(sandbox, x, y, z, axis, name)
   kit.coin(sandbox, x, y, z, name)                    -- hovers above y, already reads as a coin
+  kit.chest(sandbox, x, y, z, name)                   -- a container, for lockable mechanics
   kit.hazard(sandbox, x, y, z, width, depth, name)
   kit.spawn(sandbox, x, y, z, name)
   kit.decor(sandbox, x, y, z, kind, name)             -- kind "pillar" | "bush" | "crystal"

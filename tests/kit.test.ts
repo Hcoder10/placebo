@@ -119,7 +119,7 @@ describe('the generated Luau', () => {
   });
 
   it('exposes a constructor for every object a simple game needs', () => {
-    for (const name of ['platform', 'wall', 'door', 'coin', 'hazard', 'spawn', 'decor', 'ground']) {
+    for (const name of ['platform', 'wall', 'door', 'coin', 'chest', 'hazard', 'spawn', 'decor', 'ground']) {
       expect(KIT_LUAU).toContain(`function kit.${name}(`);
       expect(KIT_BRIEF).toContain(`kit.${name}(`);
     }

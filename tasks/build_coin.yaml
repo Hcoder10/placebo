@@ -4,23 +4,36 @@ goal: >-
   Nothing exists yet. Build the coin mechanic from scratch and prove that
   collecting is what causes the score to move.
 
+# The world every contract in this task shares.
+#
+# Built through `kit`, which is injected ahead of this block by
+# StudioSession.runCondition. Kept byte-identical to the setup in
+# contracts/coin_awards_once.yaml: a task overrides its contracts' setup, so if
+# the two drift the contract means one thing standalone and another inside the
+# task.
 setup: |
-  local coin = Instance.new("Part")
-  coin.Name = "Coin"
-  coin.Anchored = true
-  coin.Parent = sandbox
+  kit.scene()
+  kit.ground(sandbox, 120)
 
-  local board = Instance.new("Part")
-  board.Name = "Scoreboard"
-  board.Anchored = true
+  -- A route rather than a pile. Spawn on the low platform, two hops up to the
+  -- ledge where the coin sits: the coin is somewhere you have to travel to,
+  -- which is what makes collecting it read as an action rather than a state
+  -- change that happens to be nearby.
+  kit.platform(sandbox, 0, 0, -8, 20, 16, "StartPlatform")
+  kit.platform(sandbox, 0, 2, 8, 14, 12, "MidPlatform")
+  kit.platform(sandbox, 0, 4, 24, 14, 12, "Ledge")
+  kit.spawn(sandbox, 0, 0, -12, "Spawn")
+
+  kit.decor(sandbox, -14, 0, 0, "crystal", "Crystal")
+  kit.decor(sandbox, 14, 0, 4, "bush", "Bush")
+
+  kit.coin(sandbox, 0, 4, 24, "Coin")
+
+  local board = kit.tint(kit.wall(sandbox, -7, 0, -14, 6, "x", "Scoreboard"), "cream")
   board:SetAttribute("Coins", 0)
-  board.Parent = sandbox
 
-  local other = Instance.new("Part")
-  other.Name = "OtherScoreboard"
-  other.Anchored = true
+  local other = kit.tint(kit.wall(sandbox, 7, 0, -14, 6, "x", "OtherScoreboard"), "slate")
   other:SetAttribute("Coins", 0)
-  other.Parent = sandbox
 
   local collect = Instance.new("BindableEvent")
   collect.Name = "Collect"

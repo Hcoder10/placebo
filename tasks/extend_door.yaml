@@ -5,29 +5,35 @@ goal: >-
   without breaking the coin mechanic.
 
 # The world every contract in this task shares.
+#
+# The coin world from build_coin, plus the door the new mechanic is about. Built
+# through `kit`, which is injected ahead of this block by
+# StudioSession.runCondition.
 setup: |
-  local coin = Instance.new("Part")
-  coin.Name = "Coin"
-  coin.Anchored = true
-  coin.Parent = sandbox
+  kit.scene()
+  kit.ground(sandbox, 120)
 
-  local board = Instance.new("Part")
-  board.Name = "Scoreboard"
-  board.Anchored = true
-  board:SetAttribute("Coins", 0)
-  board.Parent = sandbox
+  -- A route rather than a pile. Spawn on the low platform, two hops up to the
+  -- ledge where the coin sits, and the door at the far end of the ledge — so
+  -- the thing three coins unlocks is the thing you can see ahead of you.
+  kit.platform(sandbox, 0, 0, -8, 20, 16, "StartPlatform")
+  kit.platform(sandbox, 0, 2, 8, 14, 12, "MidPlatform")
+  kit.platform(sandbox, 0, 4, 24, 14, 12, "Ledge")
+  kit.spawn(sandbox, 0, 0, -12, "Spawn")
 
-  local other = Instance.new("Part")
-  other.Name = "OtherScoreboard"
-  other.Anchored = true
-  other:SetAttribute("Coins", 0)
-  other.Parent = sandbox
+  kit.decor(sandbox, -14, 0, 0, "crystal", "Crystal")
+  kit.decor(sandbox, 14, 0, 4, "bush", "Bush")
 
-  local door = Instance.new("Part")
-  door.Name = "Door"
-  door.Anchored = true
+  kit.coin(sandbox, 0, 4, 24, "Coin")
+
+  local door = kit.door(sandbox, 0, 4, 30, "x", "Door")
   door:SetAttribute("Open", false)
-  door.Parent = sandbox
+
+  local board = kit.tint(kit.wall(sandbox, -7, 0, -14, 6, "x", "Scoreboard"), "cream")
+  board:SetAttribute("Coins", 0)
+
+  local other = kit.tint(kit.wall(sandbox, 7, 0, -14, 6, "x", "OtherScoreboard"), "slate")
+  other:SetAttribute("Coins", 0)
 
   local collect = Instance.new("BindableEvent")
   collect.Name = "Collect"

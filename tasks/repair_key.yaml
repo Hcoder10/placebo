@@ -4,28 +4,51 @@ goal: >-
   The chest mechanic is wired up and does something, but it is wrong: any key
   opens every chest. Fix it so a key opens only the chest it belongs to.
 
+# The world every contract in this task shares.
+#
+# Built through `kit`, which is injected ahead of this block by
+# StudioSession.runCondition. Kept byte-identical to the setup in both key
+# contracts: a task overrides its contracts' setup, so if they drift a contract
+# means one thing standalone and another inside the task.
 setup: |
+  kit.scene()
+  kit.ground(sandbox, 100)
+
+  -- A vault room rather than two slabs on a plane: a floor, three walls, and
+  -- the chests set into the back of the room facing the spawn, so which chest
+  -- you walked up to is something you can see.
+  kit.platform(sandbox, 0, 0, 0, 24, 20, "VaultFloor")
+  kit.wall(sandbox, 0, 0, 9.5, 24, "x", "BackWall")
+  kit.wall(sandbox, -11, 0, 0, 18, "z", "WallLeft")
+  kit.wall(sandbox, 11, 0, 0, 18, "z", "WallRight")
+  kit.spawn(sandbox, 0, 0, -6, "Spawn")
+
+  kit.decor(sandbox, -9, 0, -8, "pillar", "PillarLeft")
+  kit.decor(sandbox, 9, 0, -8, "pillar", "PillarRight")
+
   local use = Instance.new("BindableEvent")
   use.Name = "Use"
   use.Parent = sandbox
 
+  -- A real but irrelevant signal, so "ignores the wrong key" is distinguishable
+  -- from "ignores everything". Built here rather than in a control, so no
+  -- control differs structurally from the treatment.
   local decoy = Instance.new("BindableEvent")
   decoy.Name = "Decoy"
   decoy.Parent = sandbox
 
-  local chestA = Instance.new("Part")
-  chestA.Name = "ChestA"
-  chestA.Anchored = true
+  -- Two chests, so "unlocked the right one" is distinguishable from "unlocked
+  -- everything". A mechanic that opens every chest satisfies a single-chest
+  -- contract perfectly well, which is exactly the bug this pairing catches.
+  -- They are placed symmetrically and look identical on purpose: nothing in the
+  -- scene hints at which one a given key should open.
+  local chestA = kit.chest(sandbox, -6, 0, 5, "ChestA")
   chestA:SetAttribute("Locked", true)
   chestA:SetAttribute("KeyId", "KeyA")
-  chestA.Parent = sandbox
 
-  local chestB = Instance.new("Part")
-  chestB.Name = "ChestB"
-  chestB.Anchored = true
+  local chestB = kit.chest(sandbox, 6, 0, 5, "ChestB")
   chestB:SetAttribute("Locked", true)
   chestB:SetAttribute("KeyId", "KeyB")
-  chestB.Parent = sandbox
 
 # The bug, stated as code rather than as prose.
 #
