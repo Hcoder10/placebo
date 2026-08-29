@@ -262,3 +262,48 @@ describe('prediction scoring', () => {
     expect(onFailing.onFailingPatch).toBe(true);
   });
 });
+
+describe('change formats a model actually writes', () => {
+  const parse = (change: string) =>
+    ContractSchema.shape.effects.element.shape.change.safeParse(change).success;
+
+  it('accepts the forms that were being rejected', () => {
+    // Every one of these was refused with
+    // `effects.0.change: expected "+1" or "true->false"` while meaning exactly
+    // what it looks like.
+    expect(parse('"locked"->"unlocked"')).toBe(true);
+    expect(parse('100->90')).toBe(true);
+    expect(parse('+ 1')).toBe(true);
+    expect(parse('1.5->2.5')).toBe(true);
+    expect(parse('nil->Part')).toBe(true);
+  });
+
+  it('still accepts the original forms', () => {
+    expect(parse('+1')).toBe(true);
+    expect(parse('-10')).toBe(true);
+    expect(parse('true->false')).toBe(true);
+    expect(parse('true -> false')).toBe(true);
+  });
+
+  it('still refuses the ambiguous ones', () => {
+    // A bare unsigned number could mean "increases by one" or "ends up as
+    // one". Guessing would silently score the wrong thing, so it stays
+    // refused -- a rejected contract is recoverable, a misread one is not.
+    expect(parse('1')).toBe(false);
+    expect(parse('increases by one')).toBe(false);
+    expect(parse('')).toBe(false);
+    expect(parse('->false')).toBe(false);
+  });
+
+  it('matches quoted and unquoted state identically', () => {
+    const effect = { key: 'Chest.@State', change: '"locked"->"unlocked"' };
+    expect(effectMatches(effect, 'locked', 'unlocked')).toBe(true);
+    expect(effectMatches(effect, '"locked"', '"unlocked"')).toBe(true);
+    expect(effectMatches(effect, 'locked', 'locked')).toBe(false);
+  });
+
+  it('reads a delta whose sign is separated from its digits', () => {
+    expect(effectMatches({ key: 'S.@P', change: '+ 1' }, 0, 1)).toBe(true);
+    expect(effectMatches({ key: 'S.@P', change: '+ 1' }, 0, 2)).toBe(false);
+  });
+});

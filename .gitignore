@@ -6,3 +6,4 @@ dist/
 runs/*.jsonl
 !runs/.gitkeep
 .mcp.log
+.gstack/
