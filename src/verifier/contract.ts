@@ -32,6 +32,16 @@ export const ContractSchema = z
     id: z.string().min(1),
     requirement: z.string().min(1),
     /**
+     * A subtree of an existing place to experiment on, e.g. `workspace.MyGame`.
+     *
+     * When set, conditions snapshot that subtree, apply the patch, observe, and
+     * restore it — instead of rebuilding a world from `setup`. This is what
+     * lets a contract be written against a real game rather than a fixture.
+     * `sandbox` inside contract Luau binds to this root either way, so the same
+     * contract text works in both modes.
+     */
+    target: z.string().optional(),
+    /**
      * Luau that builds the world for one branch, from nothing.
      *
      * Optional because a contract used inside a task takes the task's shared

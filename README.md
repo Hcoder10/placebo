@@ -244,6 +244,64 @@ rather than from a judge model. The capability claim needs a dataset an order of
 magnitude larger, which is a matter of running it longer, not of building
 anything else.
 
+## Pointing it at your own game
+
+A contract with a `target` experiments on a subtree of your existing place
+instead of a world Placebo builds:
+
+```yaml
+id: lava_damages_once
+requirement: Stepping on the lava reduces health by exactly 10.
+target: workspace.MyGame          # your game, not a fixture
+
+treatment: |
+  sandbox.StepOn:Fire("Lava")
+
+controls:
+  - name: never_steps
+    steps: |
+      -- the player never steps on anything
+  - name: steps_elsewhere
+    steps: |
+      sandbox.StepOn:Fire("Grass")
+
+effects:
+  - { key: "Player.@Health", change: "-10" }
+non_effects: ["Bystander.@Health"]
+```
+
+`sandbox` binds to the target root, so the same contract text works against a
+fixture or a real game. Scored against a place Placebo did not author:
+
+```
+  candidate              verdict  iso    why
+  correct                ACCEPT   true   caused ["Player.@Health"]
+  preset_damage          REJECT   true   missing ["Player.@Health"]
+  damages_on_anything    REJECT   true   no causal effect (identical to control)
+  hits_bystander_too     REJECT   true   missing; collateral ["Bystander.@Health"]
+```
+
+`damages_on_anything` is caught by the second control: it damages on grass too,
+so the treatment and the control are indistinguishable.
+
+**Your place is put back after every condition.** That requires a restore that
+actually restores, and the bridge's own does not — measured, it reverts 1 of 5
+kinds of change while reporting success. Ours reverts 9 of 9, including script
+sources, and `npm run probe:worldstate` measures that rather than asserting it.
+
+| change kind | bridge `place_restore` | Placebo |
+| --- | --- | --- |
+| attribute on an instance | no | yes |
+| attribute on the root | no | yes |
+| property (number / boolean) | no | yes |
+| script `Source` | no | yes |
+| instance created after | no | yes |
+| instance deleted after | yes | yes |
+
+Property coverage is a curated list rather than exhaustive — Roblox exposes no
+runtime reflection for every writable property. `WATCHED_PROPERTIES` in
+`src/verifier/worldstate.ts` is the list, and widening it is a one-line change.
+
 ## Modes
 
 Three kinds of task, one mechanism. The only structural difference is which

@@ -1,0 +1,33 @@
+id: lava_damages_once
+requirement: >-
+  Stepping on the lava reduces the player's health by exactly 10. Standing
+  anywhere else changes nothing, and the lava never damages on its own.
+
+# Experiments run against an existing subtree of the place rather than a world
+# Placebo builds. The world is snapshotted, disturbed, observed, and restored.
+target: workspace.MyGame
+
+treatment: |
+  for _ = 1, REALIZATION do
+    sandbox.StepOn:Fire("Lava")
+  end
+
+controls:
+  - name: never_steps
+    steps: |
+      -- same world, same elapsed setup, the player never steps on anything
+
+  - name: steps_elsewhere
+    steps: |
+      for _ = 1, REALIZATION do
+        sandbox.StepOn:Fire("Grass")
+      end
+
+effects:
+  - key: "Player.@Health"
+    change: "-10"
+
+non_effects:
+  - "Bystander.@Health"
+
+realizations: [1]

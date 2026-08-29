@@ -1,5 +1,6 @@
 import { effectMatches, type Contract } from './contract.js';
 import type { ConditionResult, StateVector, StudioSession } from './studio.js';
+import { restoreWorld, rootExpression, snapshotWorld, type WorldSnapshot } from './worldstate.js';
 
 /**
  * Scoring a candidate patch by what it *caused*.
@@ -74,19 +75,45 @@ export function delta(control: StateVector, treatment: StateVector): Record<stri
   return out;
 }
 
+/**
+ * Runs one condition, in whichever mode the contract asks for.
+ *
+ * A contract without a `target` builds its world from `setup` — exact, and only
+ * possible for content we authored. A contract WITH a target experiments on an
+ * existing place: snapshot, disturb, observe, restore. The restore is measured
+ * (scripts/probe-worldstate.ts) rather than assumed, which is the only reason
+ * the second mode is trustworthy at all.
+ */
 async function runCondition(
   session: StudioSession,
   contract: Contract,
   patchLuau: string,
   interaction: string,
   realization: number,
+  snapshot?: WorldSnapshot,
 ): Promise<ConditionResult> {
-  return session.runCondition({
-    setup: contract.setup,
+  if (!contract.target) {
+    return session.runCondition({
+      setup: contract.setup,
+      patch: patchLuau,
+      interaction,
+      realization,
+    });
+  }
+
+  if (!snapshot) throw new Error(`contract ${contract.id} targets a place but no snapshot was taken`);
+
+  const result = await session.runConditionLive({
+    rootExpr: rootExpression(contract.target),
+    snapshotJson: snapshot.json,
     patch: patchLuau,
     interaction,
     realization,
   });
+
+  // Put the place back before the next condition touches it.
+  await restoreWorld(session, snapshot);
+  return result;
 }
 
 export async function evaluate(params: {
@@ -101,9 +128,34 @@ export async function evaluate(params: {
   let isolated = true;
   let settled = true;
 
+  // One snapshot for the whole evaluation: every condition restores back to the
+  // same starting world, which is the property the comparison depends on.
+  let snapshot: WorldSnapshot | undefined;
+  try {
+    if (contract.target) {
+      snapshot = await snapshotWorld(session, contract.target);
+    }
+  } catch (error) {
+    return {
+      accepted: false,
+      satisfied: [],
+      missing: contract.effects.map(effect => effect.key),
+      collateral: [],
+      observed: {},
+      observedAll: [],
+      inert: false,
+      realizations: 0,
+      stable: false,
+      isolated: false,
+      settled: false,
+      droppedByControlDisagreement: [],
+      error: `could not snapshot ${contract.target}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
   try {
     for (const realization of contract.realizations) {
-      const treatmentRun = await runCondition(session, contract, patchLuau, contract.treatment, realization);
+      const treatmentRun = await runCondition(session, contract, patchLuau, contract.treatment, realization, snapshot);
       const treatment = treatmentRun.post;
       settled &&= treatmentRun.settled;
 
@@ -117,7 +169,7 @@ export async function evaluate(params: {
       // the causal effect.
       let common: Record<string, [unknown, unknown]> | null = null;
       for (const control of contract.controls) {
-        const controlRun = await runCondition(session, contract, patchLuau, control.steps, realization);
+        const controlRun = await runCondition(session, contract, patchLuau, control.steps, realization, snapshot);
         settled &&= controlRun.settled;
 
         // The integrity check: both conditions must have begun identically.

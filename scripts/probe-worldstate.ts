@@ -40,6 +40,11 @@ doomed.Name = "Doomed"
 doomed.Anchored = true
 doomed.Parent = root
 
+local script_ = Instance.new("Script")
+script_.Name = "Logic"
+script_.Source = "-- original body"
+script_.Parent = root
+
 root:SetAttribute("Level", 1)
 return "seeded"
 `);
@@ -62,6 +67,7 @@ local deepExtra = Instance.new("Part")           -- created, nested
 deepExtra.Name = "DeepExtra"
 deepExtra.Parent = root.Platform
 root.Platform.Child:SetAttribute("Tag", "new")   -- attribute added deep
+root.Logic.Source = "-- rewritten by a patch"    -- script body edited
 return "disturbed"
 `);
 
@@ -79,6 +85,7 @@ const checks: [string, string, unknown][] = [
   ['created instance gone', 'workspace.PlaceboProbe:FindFirstChild("Extra") == nil', true],
   ['nested creation gone', 'workspace.PlaceboProbe.Platform:FindFirstChild("DeepExtra") == nil', true],
   ['added attribute gone', 'workspace.PlaceboProbe.Platform.Child:GetAttribute("Tag") == nil', true],
+  ['script source', 'workspace.PlaceboProbe.Logic.Source', '-- original body'],
 ];
 
 process.stdout.write(`  ${'change kind'.padEnd(24)} ${'want'.padEnd(7)} ${'got'.padEnd(7)} reverted?\n`);

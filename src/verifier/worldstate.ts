@@ -36,6 +36,11 @@ import type { StudioSession } from './studio.js';
  */
 export const WATCHED_PROPERTIES = [
   'Name',
+  // Script bodies. Fixing a bug in someone's game usually means editing a
+  // script, so a restore that does not put Source back leaves the place
+  // permanently modified by an experiment — the worst possible failure for a
+  // tool pointed at content you care about.
+  'Source',
   'Anchored',
   'CanCollide',
   'CanTouch',

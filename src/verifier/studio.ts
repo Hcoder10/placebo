@@ -301,4 +301,101 @@ if existing then existing:Destroy() end
 return "clean"
 `);
   }
+
+  /**
+   * Runs one condition against a subtree of an existing place.
+   *
+   * The sandbox path rebuilds its world from nothing, which is exact but only
+   * possible for content we authored. Real games cannot be reconstructed
+   * between conditions, so here the world is snapshotted, disturbed, observed,
+   * and put back — which is only sound because the restore is measured
+   * (scripts/probe-worldstate.ts), not assumed.
+   *
+   * `sandbox` is bound to the target root inside patch and interaction Luau, so
+   * the same contract text works against a fixture folder or against a real
+   * game without rewriting it.
+   */
+  async runConditionLive(params: {
+    rootExpr: string;
+    snapshotJson: string;
+    patch: string;
+    interaction: string;
+    realization: number;
+  }): Promise<ConditionResult> {
+    const { rootExpr, patch, interaction, realization } = params;
+
+    const raw = await this.luau(`
+local HttpService = game:GetService("HttpService")
+local REALIZATION = ${String(realization)}
+local sandbox = ${rootExpr}
+if not sandbox then return HttpService:JSONEncode({ pre = "{}", post = "{}", settled = false, rounds = 0 }) end
+
+local WATCHED = { "Transparency", "Anchored", "CanCollide" }
+local state = {}
+
+local function record(inst, path)
+	state["exists:" .. path] = true
+	for _, prop in WATCHED do
+		local ok, value = pcall(function() return inst[prop] end)
+		if ok and value ~= nil then
+			state[path .. "." .. prop] = tostring(value)
+		end
+	end
+	for key, value in pairs(inst:GetAttributes()) do
+		state[path .. ".@" .. key] = value
+	end
+end
+
+local function walk(inst, prefix)
+	for _, child in inst:GetChildren() do
+		local childPath = prefix == "" and child.Name or (prefix .. "/" .. child.Name)
+		record(child, childPath)
+		walk(child, childPath)
+	end
+end
+
+local function observe()
+	state = {}
+	record(sandbox, "")
+	walk(sandbox, "")
+	return HttpService:JSONEncode(state)
+end
+
+do
+${patch}
+end
+
+local pre = observe()
+
+do
+${interaction}
+end
+
+local QUIET_ROUNDS = 3
+local MAX_ROUNDS = 240
+local previous = observe()
+local quiet, rounds = 0, 0
+while quiet < QUIET_ROUNDS and rounds < MAX_ROUNDS do
+	task.wait()
+	rounds += 1
+	local current = observe()
+	if current == previous then quiet += 1 else quiet = 0; previous = current end
+end
+
+return HttpService:JSONEncode({ pre = pre, post = previous, settled = quiet >= QUIET_ROUNDS, rounds = rounds })
+`);
+
+    if (typeof raw !== 'string') return { pre: {}, post: {}, settled: false, rounds: 0 };
+    try {
+      const parsed = JSON.parse(raw) as { pre: string; post: string; settled: boolean; rounds: number };
+      return {
+        pre: JSON.parse(parsed.pre) as StateVector,
+        post: JSON.parse(parsed.post) as StateVector,
+        settled: parsed.settled,
+        rounds: parsed.rounds,
+      };
+    } catch {
+      return { pre: {}, post: {}, settled: false, rounds: 0 };
+    }
+  }
 }
