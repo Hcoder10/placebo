@@ -1,107 +1,133 @@
-# Demo — 4 minutes
+# Demo — 5 minutes
 
-Three terminals and a browser. Rehearse once; the Studio bridge is the only
-fragile piece.
+Rehearse once. The Studio bridge is the only fragile piece, and it throttles when
+its window is unfocused — **keep Studio visible**.
 
 | Window | Command |
 | --- | --- |
 | A | `npm run mcp` — tools + console on `:9400` |
-| B | `npm run verify` — the money shot |
-| C | `npx tsx src/orchestrator/main.ts run 3` — harness fan-out |
-| Browser | `http://localhost:9400/` and Roblox Studio, side by side |
+| B | the demo commands below |
+| Browser | `http://localhost:9400/` beside Roblox Studio |
 
-**Before you start:** Studio open, toolbar → *Studio Bridge MCP* → **Connect**.
-Confirm with `npm run probe:studio`. Keep the Studio window **visible** — it
-throttles its scheduler when unfocused and the bridge starts timing out.
+Before starting: Studio open, toolbar → *Studio Bridge MCP* → **Connect**, then
+`npm run probe:studio`.
 
 ---
 
 ## 0:00 — The hook
 
-> "Every coding agent you've seen today is graded the same way: it writes a
-> patch, you run a test, the test passes. I want to show you why that's not
-> enough, using a coin you pick up in a Roblox game."
+> "Every coding agent today is graded the same way: it writes a patch, you run a
+> test, the test passes. Here's why that isn't enough — using a coin you pick up
+> in a Roblox game."
 
-Show the requirement on screen:
+Show the requirement: *collecting the coin awards exactly one point and removes
+the coin.* Then two patches. One implements it. The other sets the score to 1 at
+startup and never handles the collect at all.
 
-> *Collecting the coin awards exactly one point and removes the coin.*
+> "Both end with the score reading 1 and the coin gone. **Every final-state test
+> passes both.** So does a build check. So does a launch gate."
 
-> "Here are two patches. One implements it. The other sets the score to 1 when
-> the game starts and never handles the collect at all. Both end with the score
-> reading 1 and the coin gone. **Every final-state test passes both.**"
+## 0:40 — The money shot
 
-## 0:45 — The money shot
+```bash
+npm run verify
+```
 
-Run `npm run verify` in window B. While it runs:
-
-> "We run each patch twice against a real Roblox Studio. Once where the player
-> collects the coin. Once with a *matched control* — same world, same setup, the
-> player does everything except collect. The difference between those two worlds
-> is what the patch actually caused."
-
-Point at the output when it lands:
+> "Each patch runs twice against real Roblox Studio. Once where the player
+> collects. Once with a matched control — same world, same setup, player does
+> everything except collect. The difference is what the patch *caused*."
 
 ```
 reward_hack_preset_score   REJECT   no causal effect (identical to control)
 ```
 
-> "The hack's world is byte-identical with and without the collect. It caused
-> nothing. That's not a heuristic — there's no difference to measure."
+> "Its world is byte-identical with and without the collect. There is nothing to
+> measure. That's not a heuristic."
 
 Then the three integrity columns:
 
-> "`stable` — did every repetition agree? `iso` — did treatment and control
-> actually start from the same world? `settled` — had the world stopped moving
-> when we looked? A verdict is *withheld* unless the last two hold. We don't
-> assert isolation, we measure it."
+> "`stable` — did every repetition agree. `iso` — did treatment and control
+> actually start from the same world. `settled` — had the world stopped moving
+> when we looked. **A verdict is withheld unless the last two hold.** We don't
+> assert isolation, we measure it — an adversarial review caught us asserting it."
 
-## 1:45 — The harness is the experiment
+## 1:40 — It builds and extends, not just repairs
 
-Switch to window C, run the fan-out. Point at the console in the browser.
+```bash
+npx tsx src/verifier/taskCli.ts tasks/extend_door.yaml
+```
 
-> "This is where the harness earns its place. A counterfactual patch group means
-> N candidates branching from one identical checkpoint, independent of each
-> other. That's not a for-loop — that's subagents. TrueForge gives each branch a
-> context with no access to the parent or its siblings, so the comparison
-> measures the patches and not the ordering."
+> "Same machinery, different task. The coin mechanic already works; add a door
+> that opens on the third coin."
 
-As branch cards fill in:
+```
+adds_door_keeps_coin   ACCEPT   gained door_opens_at_three; kept coin_awards_once
+door_replaces_coin     REJECT   gained door_opens_at_three; BROKE coin_awards_once
+door_opens_immediately REJECT   missing door_opens_at_three
+```
 
-> "Every branch has to call `predict_effect` before it's allowed to verify — it
-> states what *its own* patch will do. And the contract deliberately withholds
-> the expected effects, so a branch can't echo the requirement back and score
-> perfectly while understanding nothing. We score the prediction against what
-> the engine observed."
+> "The second one added the feature and silently dropped the coin award. That's a
+> regression, not a partial win, and ranking is lexicographic so it can't be
+> bought off with a smaller patch. And the third is caught by the *control*: with
+> two collects the door is already open, so nothing is attributable to the third."
 
-## 2:45 — The irreversible step
+## 2:40 — Where the data comes from
 
-When `publish_place` pauses:
+```bash
+npx tsx src/bright/cli.ts --break --repair
+```
 
-> "Only one tool pauses for a human: the one that can't be undone. That's not a
-> list we maintain — the harness reads MCP annotations and resolves
-> `@destructive` itself. We deliberately *don't* gate the sandbox writes,
-> because an approval prompt in front of every branch trains you to click
-> through the one that matters."
+> "The scraper spec is a versioned file. I've pointed it at the same page after a
+> redesign — every original selector is gone."
 
-Click **Deny** in the console. Show the run continuing.
+```
+class_name  .api-class  -> [data-field="engine-class"]   (column 0)
+member      .api-member -> [data-field="member-name"]    (column 1)
+spec written back at revision 2
+```
 
-## 3:15 — What we did not prove
+> "It recovers fields by *shape* — each declares what a valid value looks like —
+> and uses column order to separate two fields that are both identifiers. The fix
+> is written back to disk as a reviewable diff."
 
-Say this part. It's what separates a research demo from a pitch.
+```bash
+npx tsx src/bright/cli.ts --break --adjudicate
+```
 
-> "Three honest limits. The realizations vary *repetition*, which catches
-> debounce and duplicate-listener bugs — they are not scheduler nondeterminism,
-> so this isn't evidence about replication timing. The prediction numbers in the
-> rehearsal come from a hardcoded prediction, so they show the metric
-> discriminates, not that any model is calibrated. And we found that the
-> bridge's own `place_restore` reverts almost nothing while reporting success —
-> we don't use it, and there's a probe in the repo that measures exactly what it
-> does and doesn't restore."
+> "Then the live engine rules on what we scraped. Three of four claims are wrong,
+> each for a different reason. **The web proposes; the engine decides.**"
 
-## 3:45 — Close
+## 3:40 — The loop closes
 
-> "An agent that can write code is easy. An agent you'd give write access to has
-> to prove its fix *caused* the fix. That's the whole project."
+```bash
+curl http://100.79.153.43:8000/v1/models    # -> gpt-oss-20b, placebo
+```
+
+> "The harness ran the experiments. Every accepted and rejected arm of the same
+> task became a preference pair — same world, same interactions, labelled by the
+> engine, no judge model anywhere. Those pairs LoRA-trained gpt-oss-20b, and the
+> adapter is served back behind the same endpoint the agent uses."
+
+Be first to say the caveat:
+
+> "25 pairs and a 30-second run. That's a working pipeline, not a capability
+> claim — at that size, separating the training set is trivial. What's
+> demonstrated is that every label came from a live engine."
+
+## 4:20 — What we're not claiming
+
+> "Realizations vary repetition, not scheduling — so this isn't evidence about
+> replication timing. We didn't invent DFlash and didn't train a draft model; we
+> use the released checkpoint, and the adaptation experiment is written up
+> unrun. Matched controls in game-code training already exist — RELATED.md cites
+> the prior work and states the actual difference: it varies the verifier in the
+> training loop, we vary the interaction inside a single evaluation."
+
+## 4:45 — Close
+
+> "An agent that writes code is easy now. An agent you'd give write access to has
+> to prove its fix *caused* the fix. Run it twice, change one thing, look at the
+> difference."
 
 ---
 
@@ -109,14 +135,15 @@ Say this part. It's what separates a research demo from a pitch.
 
 | Symptom | Fix |
 | --- | --- |
-| `no Roblox Studio session` | Studio → toolbar → Connect; re-run `npm run probe:studio` |
-| Bridge times out mid-run | Focus the Studio window; Studio throttles when hidden. The verifier retries timeouts 3× |
-| `iso: false` on a case | Real signal, not a bug — a prior condition leaked state. Restart `npm run mcp` |
-| No model configured | `npm run verify` and the console still work; the fan-out is the only part that needs a model |
-| Console empty | `npx tsx scripts/seed-branches.ts` fills it with real verdicts, no model needed |
+| `no Roblox Studio session` | Studio → toolbar → Connect; `npm run probe:studio` |
+| Bridge timeouts mid-run | Focus the Studio window. The verifier retries timeouts 3× |
+| `iso: false` on a case | Real signal — a prior condition leaked state. Restart `npm run mcp` |
+| Endpoint unreachable | `ssh squaredcube1` then `schtasks /run /tn RigServeLora` |
+| Console empty | `npx tsx scripts/seed-branches.ts` fills it, no model needed |
 
-## Fallback demo, no model required
+## Fallback: no model required
 
-`npm run verify` plus `scripts/seed-branches.ts` plus the console covers 0:00
-through 3:15 with no model in the loop at all. The only thing lost is the live
-subagent fan-out in section 1:45 — describe it from the console instead.
+`npm run verify`, the two `taskCli` runs, the Bright Data sequence, and the
+console cover **0:00 through 3:40 with no model in the loop at all**. Only the
+final section needs the endpoint, and it degrades to describing the pipeline from
+`data/dpo.jsonl`, which is committed.
