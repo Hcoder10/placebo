@@ -20,6 +20,9 @@ function verdict(overrides: Partial<Verdict> = {}): Verdict {
     inert: false,
     realizations: 1,
     stable: true,
+    isolated: true,
+    settled: true,
+    droppedByControlDisagreement: [],
     ...overrides,
   };
 }

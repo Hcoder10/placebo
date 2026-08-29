@@ -69,11 +69,11 @@ end)
     correct: false,
     luau: `
 local board = sandbox.Scoreboard
-local taken = false
 local function award()
-	if taken then return end
 	board:SetAttribute("Coins", (board:GetAttribute("Coins") or 0) + 1)
 end
+-- The same function connected twice: a real and common bug, usually from a
+-- setup routine that runs more than once. Every collect awards two.
 sandbox.Collect.Event:Connect(award)
 sandbox.Collect.Event:Connect(award)
 sandbox.Collect.Event:Connect(function()

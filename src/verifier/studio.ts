@@ -28,6 +28,18 @@ export const SANDBOX = 'PlaceboSandbox';
 /** Canonical observation of the sandbox world. */
 export type StateVector = Record<string, unknown>;
 
+/** One experimental condition: the world before and after its interaction. */
+export interface ConditionResult {
+  /** After setup and patch, before the interaction. */
+  pre: StateVector;
+  /** After the interaction, once the world stopped changing. */
+  post: StateVector;
+  /** False when the world was still moving at the round limit. */
+  settled: boolean;
+  /** Frames waited for quiescence, reported as a cost signal. */
+  rounds: number;
+}
+
 export interface StudioConfig {
   url?: string;
   /** Fails fast rather than hanging a demo on a dead bridge. */
@@ -134,7 +146,7 @@ export class StudioSession {
     patch: string;
     interaction: string;
     realization: number;
-  }): Promise<StateVector> {
+  }): Promise<ConditionResult> {
     const { setup, patch, interaction, realization } = params;
 
     const raw = await this.luau(`
@@ -154,21 +166,6 @@ end
 
 do
 ${patch}
-end
-
-do
-${interaction}
-end
-
--- Let deferred work land before observing.
---
--- Roblox signals do not run their handlers synchronously: BindableEvent:Fire
--- and friends resume connections at the next scheduler point. When each step
--- was its own round trip the network latency hid this, and collapsing the
--- condition into one program exposed it — every patch looked inert because we
--- observed the world before a single handler had run.
-for _ = 1, 4 do
-	task.wait()
 end
 
 local WATCHED = { "Transparency", "Anchored", "CanCollide" }
@@ -195,15 +192,74 @@ local function walk(inst, path)
 	end
 end
 
-walk(sandbox, "")
-return HttpService:JSONEncode(state)
+local function observe()
+	state = {}
+	walk(sandbox, "")
+	return state
+end
+
+local function snapshotJson()
+	return HttpService:JSONEncode(observe())
+end
+
+-- State after the patch is wired but BEFORE the interaction. evaluate() checks
+-- that treatment and control agree here; if they do not, the two conditions did
+-- not start from the same world and the comparison between them means nothing.
+local pre = snapshotJson()
+
+do
+${interaction}
+end
+
+-- Settle by quiescence, not by a fixed number of frames.
+--
+-- Roblox signals do not run handlers synchronously, so the world must be given
+-- time to finish reacting. A fixed task.wait() count is a guess: a handler
+-- that defers cleanup, or an event chain longer than the guess, is silently
+-- missed and a correct patch is reported as inert. Instead, wait until the
+-- observable state stops changing, with a hard bound so a patch that never
+-- settles fails loudly rather than hanging.
+local QUIET_ROUNDS = 3
+local MAX_ROUNDS = 240
+local previous = snapshotJson()
+local quiet = 0
+local rounds = 0
+while quiet < QUIET_ROUNDS and rounds < MAX_ROUNDS do
+	task.wait()
+	rounds += 1
+	local current = snapshotJson()
+	if current == previous then
+		quiet += 1
+	else
+		quiet = 0
+		previous = current
+	end
+end
+
+return HttpService:JSONEncode({
+	pre = pre,
+	post = previous,
+	settled = quiet >= QUIET_ROUNDS,
+	rounds = rounds,
+})
 `);
 
-    if (typeof raw !== 'string') return {};
+    if (typeof raw !== 'string') return { pre: {}, post: {}, settled: false, rounds: 0 };
     try {
-      return JSON.parse(raw) as StateVector;
+      const parsed = JSON.parse(raw) as {
+        pre: string;
+        post: string;
+        settled: boolean;
+        rounds: number;
+      };
+      return {
+        pre: JSON.parse(parsed.pre) as StateVector,
+        post: JSON.parse(parsed.post) as StateVector,
+        settled: parsed.settled,
+        rounds: parsed.rounds,
+      };
     } catch {
-      return {};
+      return { pre: {}, post: {}, settled: false, rounds: 0 };
     }
   }
 

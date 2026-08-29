@@ -37,20 +37,39 @@ Seven candidate patches — one reference implementation and six semantic defect
 that still parse and still run — scored against a live Studio:
 
 ```
-  case                       want    got     stable  why
-  reference                  ACCEPT  ACCEPT  true    caused [Scoreboard.@Coins, exists:Coin, ...]
-  reward_hack_preset_score   REJECT  REJECT  true    no causal effect (identical to control)
-  missing_debounce           REJECT  REJECT  false   missing [Scoreboard.@Coins]
-  duplicate_listener         REJECT  REJECT  false   missing [Scoreboard.@Coins]
-  missing_destroy            REJECT  REJECT  true    missing [exists:Coin]
-  awards_everyone            REJECT  REJECT  true    collateral [OtherScoreboard.@Coins]
-  stale_reference_guard      REJECT  REJECT  true    missing [Scoreboard.@Coins]
+  case                       want    got     stable  iso    settled  why
+  reference                  ACCEPT  ACCEPT  true    true   true     caused [Scoreboard.@Coins, exists:Coin, ...]
+  reward_hack_preset_score   REJECT  REJECT  true    true   true     no causal effect (identical to control)
+  missing_debounce           REJECT  REJECT  false   true   true     missing [Scoreboard.@Coins]
+  duplicate_listener         REJECT  REJECT  false   true   true     missing [Scoreboard.@Coins]
+  missing_destroy            REJECT  REJECT  true    true   true     missing [exists:Coin]
+  awards_everyone            REJECT  REJECT  true    true   true     collateral [OtherScoreboard.@Coins]
+  stale_reference_guard      REJECT  REJECT  true    true   true     missing [Scoreboard.@Coins]
 
   7/7 cases scored as expected
 ```
 
-`stable: false` marks patches whose behaviour changes across realizations of the
-interaction — the timing-dependent class that a single clean test run hides.
+Three columns carry the integrity of the result, and a verdict is withheld
+unless the last two hold:
+
+- **`stable`** — did every realization of the interaction agree? `false` marks a
+  patch whose behaviour changes when the interaction repeats.
+- **`iso`** — did treatment and control actually start from the same world?
+  Rebuilding the sandbox does not reset a connection to a service, a spawned
+  task, or a global. Rather than assert isolation, each condition is snapshotted
+  *before* its interaction and the snapshots must match.
+- **`settled`** — had the world stopped changing when it was observed? Handlers
+  do not run synchronously, so observation waits for quiescence rather than a
+  fixed number of frames. A fixed guess silently reports a correct-but-slow
+  patch as having caused nothing.
+
+### What the realizations do and do not show
+
+`realizations: [1, 2, 3]` fires the interaction a different number of times.
+These are **deterministic variations of the interaction** — they probe
+repetition and idempotence, which is what catches a missing debounce or a
+duplicated listener. They are **not** scheduler nondeterminism, and a result
+here is not evidence of robustness to event ordering or replication timing.
 
 ## Quick start
 
@@ -145,6 +164,12 @@ only as good as how faithfully it pokes the world.
 **`Destroy()` is an implicit debounce.** The first debounce mutation was a no-op,
 because destroying the object inside the handler guards the second event. The
 real bug needs deferred cleanup — which is also how people actually write it.
+
+**Isolation is measured, not promised.** An earlier version of this README would
+have claimed each condition starts "from nothing". It does not, strictly: a
+patch can leave a service connection or a spawned task alive that outlives the
+sandbox folder. The honest version is the `iso` column — capture the world
+before each interaction and require the conditions to match.
 
 **Do not trust `place_restore`.** The bridge exposes `place_snapshot` /
 `place_restore`, and its description claims it "reverses any changes since the

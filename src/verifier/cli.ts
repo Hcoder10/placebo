@@ -46,8 +46,10 @@ async function main(): Promise<void> {
   process.stdout.write(`\nStudio place ${attached.placeId || '(unsaved)'}, session ${attached.token.slice(0, 8)}\n`);
   process.stdout.write(`contract: ${contract.id}  (${contract.realizations.length} realizations, ${String(contract.controls.length)} controls)\n`);
   process.stdout.write(`  ${contract.requirement.trim()}\n\n`);
-  process.stdout.write(`  ${'case'.padEnd(26)} ${'want'.padEnd(7)} ${'got'.padEnd(7)} ${'stable'.padEnd(7)} why\n`);
-  process.stdout.write(`  ${'-'.repeat(26)} ${'-'.repeat(7)} ${'-'.repeat(7)} ${'-'.repeat(7)} ${'-'.repeat(40)}\n`);
+  process.stdout.write(`  ${'case'.padEnd(26)} ${'want'.padEnd(7)} ${'got'.padEnd(7)} ${'stable'.padEnd(7)} ${'iso'.padEnd(6)} ${'settled'.padEnd(8)} why
+`);
+  process.stdout.write(`  ${'-'.repeat(26)} ${'-'.repeat(7)} ${'-'.repeat(7)} ${'-'.repeat(7)} ${'-'.repeat(6)} ${'-'.repeat(8)} ${'-'.repeat(38)}
+`);
 
   let agreed = 0;
   for (const row of rows) {
@@ -67,7 +69,7 @@ async function main(): Promise<void> {
           : `caused ${JSON.stringify(Object.keys(row.observed as object))}`;
 
     process.stdout.write(
-      `  ${String(row.case).padEnd(26)} ${String(row.expected).padEnd(7)} ${String(row.got).padEnd(7)} ${String(row.stable).padEnd(7)} ${why}${ok ? '' : '   <-- DISAGREES'}\n`,
+      `  ${String(row.case).padEnd(26)} ${String(row.expected).padEnd(7)} ${String(row.got).padEnd(7)} ${String(row.stable).padEnd(7)} ${String(row.isolated).padEnd(6)} ${String(row.settled).padEnd(8)} ${why}${ok ? '' : '   <-- DISAGREES'}\n`,
     );
   }
 

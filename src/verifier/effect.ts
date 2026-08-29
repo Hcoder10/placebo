@@ -1,5 +1,5 @@
 import { effectMatches, type Contract } from './contract.js';
-import type { StateVector, StudioSession } from './studio.js';
+import type { ConditionResult, StateVector, StudioSession } from './studio.js';
 
 /**
  * Scoring a candidate patch by what it *caused*.
@@ -39,6 +39,25 @@ export interface Verdict {
   realizations: number;
   /** False when realizations disagreed: the patch is timing-dependent. */
   stable: boolean;
+  /**
+   * False when treatment and control did not start from the same world.
+   *
+   * Rebuilding the sandbox does not reset everything a patch can touch: a
+   * connection to a service, a spawned task, or a global survives the folder
+   * being destroyed. Rather than asserting isolation, this measures it — the
+   * pre-interaction states of every condition must match, or the comparison
+   * between them is meaningless and the verdict is withheld.
+   */
+  isolated: boolean;
+  /** Conditions whose world stopped changing before the round limit. */
+  settled: boolean;
+  /**
+   * Effects dropped because the controls disagreed about them.
+   *
+   * Silently discarding these would let a badly matched control erase a real
+   * effect, so they are surfaced as a contract-design problem instead.
+   */
+  droppedByControlDisagreement: string[];
   error?: string;
 }
 
@@ -61,7 +80,7 @@ async function runCondition(
   patchLuau: string,
   interaction: string,
   realization: number,
-): Promise<StateVector> {
+): Promise<ConditionResult> {
   return session.runCondition({
     setup: contract.setup,
     patch: patchLuau,
@@ -78,10 +97,15 @@ export async function evaluate(params: {
   const { session, contract, patchLuau } = params;
 
   const perRealization: Record<string, [unknown, unknown]>[] = [];
+  const dropped = new Set<string>();
+  let isolated = true;
+  let settled = true;
 
   try {
     for (const realization of contract.realizations) {
-      const treatment = await runCondition(session, contract, patchLuau, contract.treatment, realization);
+      const treatmentRun = await runCondition(session, contract, patchLuau, contract.treatment, realization);
+      const treatment = treatmentRun.post;
+      settled &&= treatmentRun.settled;
 
       // An effect must survive every control, so a patch cannot pass by beating
       // only the most permissive one.
@@ -93,17 +117,28 @@ export async function evaluate(params: {
       // the causal effect.
       let common: Record<string, [unknown, unknown]> | null = null;
       for (const control of contract.controls) {
-        const controlState = await runCondition(session, contract, patchLuau, control.steps, realization);
-        const observed = delta(controlState, treatment);
-        common =
-          common === null
-            ? observed
-            : Object.fromEntries(
-                Object.entries(common).filter(
-                  ([key, pair]) =>
-                    key in observed && JSON.stringify(observed[key]) === JSON.stringify(pair),
-                ),
-              );
+        const controlRun = await runCondition(session, contract, patchLuau, control.steps, realization);
+        settled &&= controlRun.settled;
+
+        // The integrity check: both conditions must have begun identically.
+        if (JSON.stringify(controlRun.pre) !== JSON.stringify(treatmentRun.pre)) {
+          isolated = false;
+        }
+
+        const observed = delta(controlRun.post, treatment);
+        if (common === null) {
+          common = observed;
+          continue;
+        }
+        const agreed: Record<string, [unknown, unknown]> = {};
+        for (const [key, pair] of Object.entries(common)) {
+          if (key in observed && JSON.stringify(observed[key]) === JSON.stringify(pair)) {
+            agreed[key] = pair;
+          } else if (key in observed) {
+            dropped.add(key);
+          }
+        }
+        common = agreed;
       }
       perRealization.push(common ?? {});
     }
@@ -118,6 +153,9 @@ export async function evaluate(params: {
       inert: false,
       realizations: 0,
       stable: false,
+      isolated: false,
+      settled: false,
+      droppedByControlDisagreement: [],
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -152,7 +190,9 @@ export async function evaluate(params: {
   );
 
   return {
-    accepted: missing.length === 0 && collateral.length === 0,
+    // A verdict is only meaningful if the conditions were comparable and the
+    // world had stopped moving when we looked at it.
+    accepted: missing.length === 0 && collateral.length === 0 && isolated && settled,
     satisfied,
     missing,
     collateral,
@@ -161,6 +201,9 @@ export async function evaluate(params: {
     inert: perRealization.every(observed => Object.keys(observed).length === 0),
     realizations: perRealization.length,
     stable: signatures.size === 1,
+    isolated,
+    settled,
+    droppedByControlDisagreement: [...dropped].sort(),
   };
 }
 

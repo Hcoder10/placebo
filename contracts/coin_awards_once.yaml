@@ -78,7 +78,12 @@ effects:
 non_effects:
   - "OtherScoreboard.@Coins"
 
-# Each realization fires the signal a different number of times. A correct
-# implementation is idempotent after the first collect; a missing debounce is
-# not, and disagreement across realizations is what exposes it.
+# Each realization fires the signal a different number of times.
+#
+# Be precise about what this does and does not measure. These are *deterministic
+# variations of the interaction* -- they probe repetition and idempotence, which
+# is what exposes a missing debounce or a duplicated listener. They are NOT
+# scheduler nondeterminism, and a result here is not evidence of robustness to
+# event ordering or replication timing. Genuine timing variance needs an
+# interaction whose window straddles the handler's own delays.
 realizations: [1, 2, 3]
