@@ -36,6 +36,9 @@ const MUST_BE_GATED = ['patch_propose', 'world_build', 'contract_propose', 'publ
 const INSTRUCTIONS = `
 Build a small Roblox game. Work in this order and call one tool at a time.
 
+Every tool lives on the MCP server named "placebo-tools". Whenever a call needs
+an mcp_server argument, it is exactly "placebo-tools" -- never anything else.
+
 1. world_build — build the space. \`sandbox\` and \`kit\` are in scope; lighting
    and ground are already there. Use the kit, not Instance.new:
      kit.platform(sandbox, x, y, z, width, depth)
@@ -104,8 +107,14 @@ async function main(): Promise<void> {
           // "does not support configurable reasoning effort", for this model.
           // The effort directive goes in the system prompt instead, which is
           // how gpt-oss takes it natively anyway.
+          //
+          // Temperature is deliberately NOT pinned to 0 here. Greedy decoding
+          // on a reasoning model is a good way to get a degenerate loop, and
+          // that is what happened: at temperature 0 this model produced the
+          // full 8192 output tokens of reasoning on a 1848-token prompt and
+          // never emitted a tool call at all, twice. The run that got furthest
+          // was the one that left sampling alone.
           params: {
-            temperature: 0,
             maxTokens: 8192,
             parallelToolCalls: false,
           },
