@@ -1,0 +1,75 @@
+id: coin_awards_once
+requirement: >-
+  When a player collects the coin, the score increases by exactly one and the
+  coin is removed. A player who never collects it changes nothing, and no other
+  player's score moves.
+
+# Builds the world for one branch, from nothing. Every branch calls this, so
+# treatment and control start byte-identical by construction rather than by
+# trusting a snapshot mechanism.
+setup: |
+  local coin = Instance.new("Part")
+  coin.Name = "Coin"
+  coin.Anchored = true
+  coin.Parent = sandbox
+
+  local board = Instance.new("Part")
+  board.Name = "Scoreboard"
+  board.Anchored = true
+  board:SetAttribute("Coins", 0)
+  board.Parent = sandbox
+
+  -- A second scoreboard, so "awarded the wrong player" is distinguishable from
+  -- "awarded nobody".
+  local other = Instance.new("Part")
+  other.Name = "OtherScoreboard"
+  other.Anchored = true
+  other:SetAttribute("Coins", 0)
+  other.Parent = sandbox
+
+  -- The collect signal. Studio's edit mode does not run physics, so the
+  -- mechanic is driven by an explicit server-authoritative event rather than a
+  -- physical Touched. The causal structure is identical: something fires, and
+  -- the world is supposed to move because of it.
+  local collect = Instance.new("BindableEvent")
+  collect.Name = "Collect"
+  collect.Parent = sandbox
+
+# The intervention: the collect signal fires for this player, REALIZATION times.
+# Realizations >1 model a repeated/duplicated event, which is how debounce and
+# duplicate-listener bugs actually surface in production.
+treatment: |
+  for _ = 1, REALIZATION do
+    sandbox.Collect:Fire("P1")
+  end
+
+controls:
+  # The player does everything except the thing under test.
+  - name: no_collect
+    steps: |
+      -- deliberately empty: same world, same elapsed setup, no interaction
+
+  # A real but irrelevant signal, so "did nothing" is distinguishable from
+  # "responds to anything at all".
+  - name: unrelated_signal
+    steps: |
+      local decoy = Instance.new("BindableEvent")
+      decoy.Name = "Decoy"
+      decoy.Parent = sandbox
+      for _ = 1, REALIZATION do
+        decoy:Fire("P1")
+      end
+
+effects:
+  - key: "Scoreboard.@Coins"
+    change: "+1"
+  - key: "exists:Coin"
+    change: "true->false"
+
+non_effects:
+  - "OtherScoreboard.@Coins"
+
+# Each realization fires the signal a different number of times. A correct
+# implementation is idempotent after the first collect; a missing debounce is
+# not, and disagreement across realizations is what exposes it.
+realizations: [1, 2, 3]
