@@ -93,30 +93,41 @@ Recorded in the repo so it cannot drift under pressure:
 - **The DGX Spark numbers are arithmetic, not measurement.** We do not have one.
   [DGX_SPARK.md](DGX_SPARK.md) shows the working so it is falsifiable.
 
-## Known limitation: the live fan-out does not run
+## The live fan-out runs
 
-The orchestrator that fans branches out through `create_sub_agent` is written,
-typechecked, and registered with the harness — `assertGated` passes and all six
-tools resolve to their intended selectors. It has not been demonstrated
-end to end with a live model, for a specific reason:
+`gpt-oss-20b`, served by us, spawns subagents through TrueForge, writes Luau, and
+has every patch scored by what it caused in a live Roblox Studio.
 
-gpt-oss-20b emits tool calls in Harmony format, and vLLM 0.28 does not surface
-them as `tool_calls`. The model's own reasoning trace says it intends to call the
-tool; the field comes back `null`. The obvious override
-(`VLLM_ATTENTION_BACKEND`-style env config for the tool parser) no longer exists
-in that version. Serving a second model with better-supported tool calling was
-attempted and did not come up in the time available.
+```
+session ... model selfhosted/gpt-oss-20b  branches 3
+  branch opened   branch_a
+  branch finished branch_a
+  branch opened   branch_b
+  branch finished branch_b
+```
 
-So the counterfactual branching is demonstrated by `scripts/seed-branches.ts`,
-which drives the identical MCP surface against the identical live Studio with
-fixed candidates instead of model-generated ones. Every part downstream of the
-model — prediction scoring, causal verification, ranking, the console — is
-exercised. What is unproven is that a model drives it well, not that the
-mechanism works.
+Model-authored branches and their engine verdicts:
 
-Building the pipeline so this was survivable was deliberate: the dataset, the
-verifier, and the console were all made to work without a model precisely so a
-serving problem could not take the submission down with it.
+| branch | patch | verdict |
+| --- | --- | --- |
+| `coin_awards_once` | 518 B | ACCEPT |
+| `branch-coin` | 549 B | ACCEPT |
+| `branch1` | 13 B — `print("test")` | REJECT |
+
+That last row is the point of the entire project. The model probed with
+`print("test")`, and the verifier rejected it for causing nothing — the exact
+failure mode a final-state test waves through, caught on a model's real output
+rather than on a fixture we wrote.
+
+**What unblocked it.** gpt-oss speaks Harmony, and vLLM returns `tool_calls:
+null` without a parser while the model's own reasoning says it intended to call
+the tool. The fix is `--tool-call-parser openai --enable-auto-tool-choice`;
+`openai` is the registered name for `vllm.tool_parsers.gptoss_tool_parser`. We
+lost hours to a wrong conclusion here: an earlier probe for the flag timed out
+before argparse printed, and silence was read as "the flag does not exist."
+Passing a deliberately invalid parser name and reading the resulting `KeyError`
+lists every valid choice in one line, and is the fastest way to answer that
+question.
 
 ## Why a DGX Spark is the right home for this
 

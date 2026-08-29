@@ -233,6 +233,7 @@ Measured end to end today:
 | Preference export | 25 pairs, 3 supervised examples — every label a measured causal difference |
 | LoRA DPO on gpt-oss-20b | train loss 0.39, 31.8 MB adapter |
 | Adapter served | one endpoint exposes `gpt-oss-20b` and `placebo` |
+| Live fan-out | gpt-oss-20b spawns subagents, writes Luau, engine judges it — a model-authored `print("test")` rejected for causing nothing |
 
 **What these numbers are not.** The dataset is 25 pairs generated in an
 afternoon, and the training run took 30 seconds. `rewards/accuracies: 1.0`
