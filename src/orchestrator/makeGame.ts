@@ -34,57 +34,32 @@ const MODEL = process.env.PLACEBO_MODEL ?? 'selfhosted/gpt-oss-20b';
 const MUST_BE_GATED = ['patch_propose', 'world_build', 'contract_propose', 'publish_place'];
 
 const INSTRUCTIONS = `
-You build small Roblox games that are worth playing, one mechanic at a time,
-and you prove each one works.
+Build a small Roblox game. Work in this order and call one tool at a time.
 
-BUILD THE SPACE FIRST, THEN THE MECHANICS.
-
-1. world_build — create the objects the game needs. \`sandbox\` and \`kit\` are
-   in scope. Lighting and a ground plane are already applied.
-
-   Build with the kit, not with raw Instance.new:
+1. world_build — build the space. \`sandbox\` and \`kit\` are in scope; lighting
+   and ground are already there. Use the kit, not Instance.new:
      kit.platform(sandbox, x, y, z, width, depth)
-     kit.coin(sandbox, x, y, z)
-     kit.door(sandbox, x, y, z, axis)
-     kit.wall(sandbox, x, y, z, length, axis)
-     kit.hazard(sandbox, x, y, z, width, depth)
-     kit.spawn(sandbox, x, y, z)
-     kit.decor(sandbox, x, y, z, kind)
+     kit.coin(sandbox, x, y, z)      kit.door(sandbox, x, y, z, axis)
+     kit.hazard(sandbox, x, y, z, width, depth)   kit.spawn(sandbox, x, y, z)
+     kit.wall(sandbox, x, y, z, length, axis)     kit.decor(sandbox, x, y, z, kind)
+   Each returns the instance, so you can attach Attributes. A character is 5
+   studs tall and jumps 7; vary heights so it reads as a level. Add a
+   BindableEvent for each player action, because edit mode runs no physics.
 
-   Each returns the instance, so you can still attach Attributes to it.
+2. design_check — fix anything it reports, then check again.
 
-   A character is about 5 studs tall and jumps about 7. Space platforms so they
-   can actually be reached. Vary heights — a flat plane of identical parts is
-   not a level. Put the interesting thing somewhere the player has to travel to.
+3. contract_propose — one mechanic:
+     treatment "sandbox.Collect:Fire()"   control "-- nothing"
+     effects "Score.@Points:+1, exists:Coin:true->false"
+     non_effects "Other.@Points"          reference <your Luau>
+   The treatment fires the trigger; the implementation reacts to it. A contract
+   satisfied by no implementation is rejected.
 
-   Use BindableEvents for player actions: Studio's edit mode does not run
-   physics, so a Touched event will never fire here. Give score-like values as
-   Attributes, because those are what the verifier can observe.
+4. patch_propose, then causal_verify with your contract_id. If rejected, read
+   what the engine observed and fix it.
 
-2. design_check — look at what you built. It reports overlapping geometry,
-   unstyled default parts, proportion and variety problems, each with the fix.
-   Repair anything it finds with world_build and check again before moving on.
-
-3. contract_propose — state what a mechanic must DO:
-     treatment  — Luau firing the interaction, e.g. sandbox.Grab:Fire()
-     control    — Luau for the SAME world where it does NOT happen; "-- nothing" is fine
-     effects    — "Score.@Points:+1, exists:Coin:true->false"
-     non_effects— "Other.@Points"   (may be empty)
-     reference  — the Luau implementation you believe satisfies it
-
-   A contract is audited before it is kept. If it can be satisfied with no
-   implementation at all it is rejected, so do not write a treatment that
-   performs the effect itself — the treatment fires the trigger, the
-   implementation reacts to it.
-
-4. patch_propose then causal_verify with contract_id set to your contract.
-   If it is rejected, read what the engine observed and try again.
-
-Build the mechanics the request asks for and no others. When every mechanic is
-accepted and design_check passes, call contract_list and summarise what you
-built and what each mechanic was proven to cause.
-
-Do not publish anything.
+Repeat 3-4 for each mechanic requested. Then call contract_list and summarise.
+Do not publish.
 `.trim();
 
 async function main(): Promise<void> {
@@ -124,10 +99,14 @@ async function main(): Promise<void> {
           // describing a tool call rather than making one -- is a sampling
           // accident, and there is no reason to sample here: we want the most
           // likely tool call, not a creative one.
+          //
+          // `reasoningEffort` is not settable here -- TrueForge answers 422,
+          // "does not support configurable reasoning effort", for this model.
+          // The effort directive goes in the system prompt instead, which is
+          // how gpt-oss takes it natively anyway.
           params: {
-            reasoningEffort: 'low',
             temperature: 0,
-            maxTokens: 2048,
+            maxTokens: 8192,
             parallelToolCalls: false,
           },
         },
