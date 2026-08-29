@@ -13,6 +13,7 @@
     "test": "vitest run",
     "verify": "tsx src/verifier/cli.ts",
     "flywheel": "tsx src/train/continual.ts",
+    "spec:measure": "tsx src/train/speculation.ts",
     "build:game": "tsx src/verifier/buildGame.ts",
     "make:game": "tsx src/orchestrator/makeGame.ts",
     "mcp": "tsx src/mcp/server.ts",

@@ -35,6 +35,8 @@ const CORPUS = join(DATA, 'corpus.jsonl');
 const DPO = join(DATA, 'dpo.jsonl');
 const SFT = join(DATA, 'sft.jsonl');
 const CURRICULUM = join(DATA, 'curriculum.jsonl');
+/** Target generations, which are what a draft model has to learn to predict. */
+const DRAFT_TRACES = join(DATA, 'draft-traces.jsonl');
 
 const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
 
@@ -114,6 +116,69 @@ async function collectCurriculum(session: StudioSession, turn: number): Promise<
   }
 }
 
+/**
+ * Collects what the target model actually emits on this domain.
+ *
+ * A draft model is trained to predict a specific target's next tokens, so its
+ * training data is not the verified patches — it is the target's own output,
+ * including the parts that were wrong. Measured on the released general-purpose
+ * draft, accepted length on this workload is 2.23 of 8 drafted tokens, which is
+ * why speculation currently costs more than it saves. Traces collected here are
+ * what a domain-adapted draft would learn from.
+ */
+async function collectDraftTraces(turn: number): Promise<number> {
+  const endpoint = process.env.PLACEBO_BASE_URL ?? 'http://100.79.153.43:8000/v1';
+  const model = process.env.PLACEBO_TARGET_MODEL ?? 'gpt-oss-20b';
+
+  const prompts = [
+    'Collecting the coin awards exactly one point and removes the coin.',
+    'A door opens once the player has collected three coins.',
+    'Stepping on the lava reduces the player health by ten, once per step.',
+    'A button toggles a light on and off each time it is pressed.',
+    'Picking up a key unlocks the chest, and only the chest it belongs to.',
+    'A checkpoint saves the player position, and respawning returns them to it.',
+  ];
+
+  let written = 0;
+  for (const prompt of prompts) {
+    const response = await fetch(`${endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: prompt },
+        ],
+        // Sampled, not greedy: a draft has to predict the distribution the
+        // target actually produces at serving temperature, not its argmax.
+        temperature: 0.7,
+        max_tokens: 320,
+      }),
+    }).catch(() => null);
+
+    if (!response?.ok) continue;
+    const body = (await response.json()) as {
+      choices?: { message?: { content?: string | null; reasoning?: string | null } }[];
+    };
+    const message = body.choices?.[0]?.message;
+    const completion = message?.content ?? message?.reasoning ?? '';
+    if (!completion.trim()) continue;
+
+    appendFileSync(
+      DRAFT_TRACES,
+      `${JSON.stringify({ turn, at: new Date().toISOString(), model, prompt, completion })}
+`,
+      'utf8',
+    );
+    written += 1;
+  }
+
+  process.stdout.write(`  draft traces: +${String(written)} target generations
+`);
+  return written;
+}
+
 async function main(): Promise<void> {
   const taskPaths = process.argv.slice(2);
   const tasks = taskPaths.length > 0 ? taskPaths : ['tasks/build_coin.yaml', 'tasks/extend_door.yaml'];
@@ -129,6 +194,7 @@ async function main(): Promise<void> {
   await session.connect();
 
   await collectCurriculum(session, turn);
+  await collectDraftTraces(turn);
 
   for (const relative of tasks) {
     const { task, contracts } = loadTask(join(ROOT, relative));
