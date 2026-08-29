@@ -188,6 +188,19 @@ treatment against a control that started from a different world. Placebo rebuild
 each condition's world from nothing instead — determinism by construction rather
 than by promise.
 
+## What is and is not novel
+
+Execution-gated training for game code already exists, and so does using a
+matched control to show a verifier is doing the work — see
+[RELATED.md](RELATED.md), written after checking rather than before.
+
+The difference is **what the control varies**. Prior work varies the *verifier*
+in the training loop, to ask whether the gain came from filter precision or from
+more data. Placebo varies the *interaction* inside a single evaluation, to ask
+whether a specific state change was caused by the player's action or was going to
+happen regardless. A launch gate accepts the reward hack in this repo; only a
+no-collect control rejects it.
+
 ## Layout
 
 ```
