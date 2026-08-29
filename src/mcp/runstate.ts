@@ -107,31 +107,71 @@ export class Run {
 /**
  * Scores how well a branch predicted its *own* patch.
  *
- * Deliberately compared against what the engine observed, never against the
- * contract. A model that echoes the contract's desired effects back would score
- * perfectly while understanding nothing — the measurement only has content when
- * the patch is wrong, which is exactly when echoing gives the wrong answer.
+ * Compared against what the engine observed, never against the contract. A
+ * model that echoes the contract's desired effects would score perfectly while
+ * understanding nothing — the measurement only has content when the patch is
+ * wrong, which is exactly when echoing gives the wrong answer.
+ *
+ * Two ways an earlier version of this could be farmed, both found by auditing a
+ * real model's output rather than by reasoning about it:
+ *
+ *   - **Invented keys were free.** An `unchanged` entry naming a key that does
+ *     not exist in the state vocabulary is always absent from the observed
+ *     diff, so it always scored correct. One branch predicted
+ *     `unchanged: ["sandbox.Coin"]`, which is not a state key at all.
+ *   - **Omission was free.** Only keys the model chose to mention were scored,
+ *     so predicting one easy effect and staying silent about the rest scored
+ *     100%. A branch scored 2/2 while never predicting that the coin it
+ *     destroys would stop existing.
+ *
+ * So the score is now precision *and* recall over a known vocabulary: unknown
+ * keys count against, and effects the engine observed that the prediction
+ * missed count against.
  */
-export function scorePrediction(branch: Branch): {
+export function scorePrediction(
+  branch: Branch,
+  /** Keys a contract cares about; used to judge what a prediction owed. */
+  contractKeys: string[] = [],
+): {
   scored: boolean;
   correct: number;
   total: number;
   wrong: string[];
+  /** Predicted keys that are not part of the observable state vocabulary. */
+  invalidKeys: string[];
+  /** Effects the engine observed that the prediction never mentioned. */
+  missed: string[];
   /** True when this branch's patch failed — where the metric actually bites. */
   onFailingPatch: boolean;
 } {
   const { prediction, verdict } = branch;
-  if (!prediction || !verdict) return { scored: false, correct: 0, total: 0, wrong: [], onFailingPatch: false };
+  if (!prediction || !verdict) {
+    return { scored: false, correct: 0, total: 0, wrong: [], invalidKeys: [], missed: [], onFailingPatch: false };
+  }
 
-  // Every realization, not just the first: a claim that only holds when events
-  // arrive in a friendly order is not an understanding of the patch.
   const runs = verdict.observedAll.length > 0 ? verdict.observedAll : [verdict.observed];
+
+  // The vocabulary a prediction may legitimately name: anything the engine
+  // reported, plus anything the contract is about (so predicting a required
+  // effect that failed to happen is still a valid, wrong, prediction).
+  const vocabulary = new Set<string>([...contractKeys]);
+  for (const observed of runs) for (const key of Object.keys(observed)) vocabulary.add(key);
+
   const wrong: string[] = [];
+  const invalidKeys: string[] = [];
   let correct = 0;
   let total = 0;
 
+  const claimed = new Set<string>();
+
   for (const [key, expected] of Object.entries(prediction.effects)) {
     total += 1;
+    claimed.add(key);
+    if (!vocabulary.has(key)) {
+      invalidKeys.push(key);
+      wrong.push(`${key}: not an observable state key`);
+      continue;
+    }
     const actuals = runs.map(observed => observed[key]);
     const holds = actuals.every(
       actual => actual !== undefined && normalise(actual) === normalise(expected),
@@ -146,6 +186,14 @@ export function scorePrediction(branch: Branch): {
 
   for (const key of prediction.unchanged) {
     total += 1;
+    claimed.add(key);
+    if (!vocabulary.has(key)) {
+      // The farmable case: an invented key is absent from every diff, so under
+      // the old scoring it was always "correct".
+      invalidKeys.push(key);
+      wrong.push(`${key}: not an observable state key`);
+      continue;
+    }
     if (runs.every(observed => observed[key] === undefined)) {
       correct += 1;
     } else {
@@ -154,7 +202,16 @@ export function scorePrediction(branch: Branch): {
     }
   }
 
-  return { scored: true, correct, total, wrong, onFailingPatch: !verdict.accepted };
+  // Recall: the engine moved something the prediction never mentioned.
+  const observedKeys = new Set<string>();
+  for (const observed of runs) for (const key of Object.keys(observed)) observedKeys.add(key);
+  const missed = [...observedKeys].filter(key => !claimed.has(key)).sort();
+  for (const key of missed) {
+    total += 1;
+    wrong.push(`${key}: moved, and the prediction did not mention it`);
+  }
+
+  return { scored: true, correct, total, wrong, invalidKeys, missed, onFailingPatch: !verdict.accepted };
 }
 
 /**

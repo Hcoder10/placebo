@@ -123,14 +123,18 @@ describe('contract validation', () => {
 
 describe('prediction scoring', () => {
   it('credits a prediction that matches the engine', () => {
+    // The contract vocabulary has to be supplied: a key is only a legitimate
+    // thing to predict if the engine reported it or the contract is about it.
     const scored = scorePrediction(
       branch({
         prediction: { effects: { 'S.@Coins': '+1' }, unchanged: ['O.@Coins'], at: '' },
         verdict: verdict({ observed: { 'S.@Coins': '0 -> 1' }, observedAll: [{ 'S.@Coins': '0 -> 1' }] }),
       }),
+      ['S.@Coins', 'O.@Coins'],
     );
     expect(scored.correct).toBe(2);
     expect(scored.total).toBe(2);
+    expect(scored.invalidKeys).toEqual([]);
   });
 
   it('accepts "0 -> 1" and "+1" as the same claim', () => {
@@ -139,6 +143,7 @@ describe('prediction scoring', () => {
         prediction: { effects: { k: '0 -> 1' }, unchanged: [], at: '' },
         verdict: verdict({ observed: { k: '0 -> 1' }, observedAll: [{ k: '0 -> 1' }] }),
       }),
+      ['k'],
     );
     expect(scored.correct).toBe(1);
   });
@@ -192,6 +197,59 @@ describe('prediction scoring', () => {
   it('reports nothing until both a prediction and a verdict exist', () => {
     expect(scorePrediction(branch()).scored).toBe(false);
     expect(scorePrediction(branch({ verdict: verdict() })).scored).toBe(false);
+  });
+
+  it('does not credit a predicted key that is not part of the state vocabulary', () => {
+    // Found by auditing a real model's output: a branch predicted
+    // unchanged: ["sandbox.Coin"], which is not a state key. An invented key is
+    // absent from every diff, so under naive scoring it always counted correct.
+    const scored = scorePrediction(
+      branch({
+        prediction: { effects: {}, unchanged: ['sandbox.Coin'], at: '' },
+        verdict: verdict({ observed: {}, observedAll: [{}] }),
+      }),
+      ['Scoreboard.@Coins', 'exists:Coin'],
+    );
+    expect(scored.correct).toBe(0);
+    expect(scored.invalidKeys).toEqual(['sandbox.Coin']);
+  });
+
+  it('penalises an effect the engine caused that the prediction never mentioned', () => {
+    // The other farmable case: predict one easy effect, stay silent about the
+    // rest, and score 100%.
+    const scored = scorePrediction(
+      branch({
+        prediction: { effects: { 'Scoreboard.@Coins': '+1' }, unchanged: [], at: '' },
+        verdict: verdict({
+          observed: { 'Scoreboard.@Coins': '0 -> 1', 'exists:Coin': 'true -> undefined' },
+          observedAll: [{ 'Scoreboard.@Coins': '0 -> 1', 'exists:Coin': 'true -> undefined' }],
+        }),
+      }),
+      ['Scoreboard.@Coins', 'exists:Coin'],
+    );
+    expect(scored.correct).toBe(1);
+    expect(scored.total).toBe(2);
+    expect(scored.missed).toEqual(['exists:Coin']);
+  });
+
+  it('still scores a complete, accurate prediction perfectly', () => {
+    const scored = scorePrediction(
+      branch({
+        prediction: {
+          effects: { 'Scoreboard.@Coins': '+1', 'exists:Coin': 'true->false' },
+          unchanged: [],
+          at: '',
+        },
+        verdict: verdict({
+          observed: { 'Scoreboard.@Coins': '0 -> 1', 'exists:Coin': 'true -> undefined' },
+          observedAll: [{ 'Scoreboard.@Coins': '0 -> 1', 'exists:Coin': 'true -> undefined' }],
+        }),
+      }),
+      ['Scoreboard.@Coins', 'exists:Coin'],
+    );
+    expect(scored.correct).toBe(2);
+    expect(scored.total).toBe(2);
+    expect(scored.missed).toEqual([]);
   });
 
   it('flags whether the score was earned on a failing patch', () => {

@@ -47,6 +47,11 @@ export function awaitApproval(id: string, tool: string, args: Record<string, unk
   return new Promise(resolve => approvalWaiters.set(id, resolve));
 }
 
+/** Keys the contract is about, so a prediction can be judged on what it owed. */
+function contractKeys(): string[] {
+  return [...contract.effects.map(effect => effect.key), ...contract.non_effects];
+}
+
 function text(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
 }
@@ -153,7 +158,7 @@ function buildServer(): McpServer {
       });
       run.recordVerdict(branch, verdict);
 
-      const prediction = scorePrediction(candidate);
+      const prediction = scorePrediction(candidate, contractKeys());
       return text({
         accepted: verdict.accepted,
         satisfied: verdict.satisfied,
@@ -165,6 +170,8 @@ function buildServer(): McpServer {
         realizations: verdict.realizations,
         prediction_score: `${String(prediction.correct)}/${String(prediction.total)}`,
         prediction_wrong: prediction.wrong,
+        prediction_invalid_keys: prediction.invalidKeys,
+        prediction_missed: prediction.missed,
       });
     },
   );
@@ -285,7 +292,7 @@ app.get('/api/state', (_req, res) => {
       controls: contract.controls.map(control => control.name),
     },
     predictions: Object.fromEntries(
-      Object.values(run.state.branches).map(branch => [branch.id, scorePrediction(branch)]),
+      Object.values(run.state.branches).map(branch => [branch.id, scorePrediction(branch, contractKeys())]),
     ),
   });
 });

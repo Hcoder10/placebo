@@ -207,12 +207,30 @@ export async function evaluate(params: {
   };
 }
 
-/** Human- and comparison-friendly rendering of one realization's diff. */
+/**
+ * Human- and comparison-friendly rendering of one realization's diff.
+ *
+ * Property keys belonging to an instance that stopped existing are dropped.
+ * Destroying a part vanishes every property it had, so a single destruction
+ * arrives as `exists:Coin`, `Coin.Anchored`, `Coin.CanCollide` and
+ * `Coin.Transparency` — one event reported four times. That inflates apparent
+ * effect size and, worse, buries a genuine collateral change among derived
+ * noise. The existence key already carries the information.
+ */
 function renderDiff(observed: Record<string, [unknown, unknown]>): Record<string, string> {
+  const destroyed = new Set(
+    Object.entries(observed)
+      .filter(([key, [, after]]) => key.startsWith('exists:') && (after === undefined || after === null))
+      .map(([key]) => key.slice('exists:'.length)),
+  );
+
   return Object.fromEntries(
-    Object.entries(observed).map(([key, [before, after]]) => [
-      key,
-      `${JSON.stringify(before)} -> ${JSON.stringify(after)}`,
-    ]),
+    Object.entries(observed)
+      .filter(([key]) => {
+        const dot = key.indexOf('.');
+        if (dot === -1) return true;
+        return !destroyed.has(key.slice(0, dot));
+      })
+      .map(([key, [before, after]]) => [key, `${JSON.stringify(before)} -> ${JSON.stringify(after)}`]),
   );
 }
