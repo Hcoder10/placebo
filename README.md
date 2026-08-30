@@ -81,6 +81,17 @@ A launch test asks "did it run". A state assertion asks "is the number right". N
 
 Placebo asks it the way an experiment does. Build the world from nothing. Run the interaction in the treatment and not in the control. Snapshot both. The causal effect is the difference, and anything present in both is discarded no matter how correct it looks.
 
+## Why the harness is load bearing
+
+A causal test needs two arms that cannot contaminate each other. That is not a nice property, it is the whole experiment: if the branch that writes the treatment can see what the control did, the arms are correlated and the difference means nothing.
+
+TrueForge gives that for free. Each counterfactual branch is a subagent with **no access to the parent conversation or to its siblings**, so the arms are independent by construction rather than by convention. In a single chat loop, contamination is the default and you would have to argue your way out of it.
+
+Two more things it does that the project depends on:
+
+**Approval gating from tool annotations.** `patch_propose` and `world_build` are `@write`, `publish_place` is `@destructive`, and TrueForge resolves those from the MCP `readOnlyHint` and `destructiveHint` fields. That surfaced a real problem: the Roblox bridge exposes **134 tools with no annotations at all**, which silently exempts every one of them from approval. Any harness that trusts annotations inherits that. `assertGated()` now refuses to start a run if a tool that should be gated is not.
+
+**A session, turn and event model you can read after the fact.** Every branch's tool calls and responses are queryable, which is how three separate bugs in this repo were found: a tool name arriving as `call_tool<|channel|>commentary` from a streaming parser, a model omitting a required `id` field, and a run that silently rebuilt the shared world underneath another run's experiment.
 ## Post-training: a drafter we trained on our own traces
 
 Speculative decoding pays exactly as well as the draft model predicts the target. The released general-purpose DFlash drafter accepts **2.17 of 8** tokens on this workload. We collected 787 traces from our own target, reconstructed the training objective from the checkpoint's `spec_generate` loop (z-lab ship inference code only), and trained a drafter on them.
