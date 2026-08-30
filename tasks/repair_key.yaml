@@ -14,17 +14,56 @@ setup: |
   kit.scene()
   kit.ground(sandbox, 100)
 
-  -- A vault room rather than two slabs on a plane: a floor, three walls, and
-  -- the chests set into the back of the room facing the spawn, so which chest
-  -- you walked up to is something you can see.
-  kit.platform(sandbox, 0, 0, 0, 24, 20, "VaultFloor")
-  kit.wall(sandbox, 0, 0, 9.5, 24, "x", "BackWall")
-  kit.wall(sandbox, -11, 0, 0, 18, "z", "WallLeft")
-  kit.wall(sandbox, 11, 0, 0, 18, "z", "WallRight")
-  kit.spawn(sandbox, 0, 0, -6, "Spawn")
+  -- A processional bridge leads into a twin reliquary. The chests sit one stud
+  -- above the nave in matching side chapels, with a lit central relic making
+  -- the split legible from the spawn.
+  kit.platform(sandbox, 0, 0, -18, 10, 12, "EntryBridge")
+  kit.platform(sandbox, 0, 0, 0, 30, 24, "VaultFloor")
+  kit.tint(kit.platform(sandbox, -8, 1, 7, 10, 8, "AlcoveA"), "clay")
+  kit.tint(kit.platform(sandbox, 8, 1, 7, 10, 8, "AlcoveB"), "clay")
+  kit.platform(sandbox, 0, 1, 5.5, 4, 5, "CentralDais")
+  kit.spawn(sandbox, 0, 0, -19, "Spawn")
 
-  kit.decor(sandbox, -9, 0, -8, "pillar", "PillarLeft")
-  kit.decor(sandbox, 9, 0, -8, "pillar", "PillarRight")
+  -- The outer shell is broken at the entrance, then each raised chapel gets
+  -- its own three-sided silhouette. All wall bases touch their floor surfaces.
+  kit.wall(sandbox, -15.5, 0, 0, 24, "z", "OuterWallWest")
+  kit.wall(sandbox, 15.5, 0, 0, 24, "z", "OuterWallEast")
+  kit.wall(sandbox, 0, 0, 12.5, 30, "x", "OuterWallNorth")
+  kit.wall(sandbox, -10, 0, -12.5, 10, "x", "EntryWallWest")
+  kit.wall(sandbox, 10, 0, -12.5, 10, "x", "EntryWallEast")
+
+  kit.wall(sandbox, -8, 1, 11.5, 10, "x", "AlcoveABack")
+  kit.wall(sandbox, -13.5, 1, 7, 8, "z", "AlcoveAOuter")
+  kit.wall(sandbox, -2.5, 1, 7, 8, "z", "AlcoveAInner")
+  kit.wall(sandbox, 8, 1, 11.5, 10, "x", "AlcoveBBack")
+  kit.wall(sandbox, 2.5, 1, 7, 8, "z", "AlcoveBInner")
+  kit.wall(sandbox, 13.5, 1, 7, 8, "z", "AlcoveBOuter")
+
+  -- Warm entry lanterns pull the player inward. Four pillars create a second,
+  -- lower frame around the chests instead of leaving them loose against walls.
+  local lanternWest = kit.tint(kit.decor(sandbox, -4, 0, -9.5, "pillar", "VaultLanternWest"), "cream")
+  kit.light(lanternWest, "gold", 1.6, 14)
+  local lanternEast = kit.tint(kit.decor(sandbox, 4, 0, -9.5, "pillar", "VaultLanternEast"), "cream")
+  kit.light(lanternEast, "gold", 1.6, 14)
+  kit.decor(sandbox, -11, 1, 4.5, "pillar", "AlcoveAPillarOuter")
+  kit.decor(sandbox, -5, 1, 4.5, "pillar", "AlcoveAPillarInner")
+  kit.decor(sandbox, 5, 1, 4.5, "pillar", "AlcoveBPillarInner")
+  kit.decor(sandbox, 11, 1, 4.5, "pillar", "AlcoveBPillarOuter")
+
+  kit.decor(sandbox, -11, 1, 9.5, "crystal", "AlcoveACrystal")
+  kit.decor(sandbox, 11, 1, 9.5, "crystal", "AlcoveBCrystal")
+  kit.decor(sandbox, 0, 1, 5.5, "crystal", "CentralRelic")
+
+  -- The vault sits in an overgrown excavation. Repeated clusters at the shell
+  -- edges establish depth without putting collision into the playable aisle.
+  kit.decor(sandbox, -22, 0, -18, "bush", "BushWestA")
+  kit.decor(sandbox, -18.5, 0, -20.5, "bush", "BushWestB")
+  kit.decor(sandbox, -22, 0, -14, "bush", "BushWestC")
+  kit.decor(sandbox, 22, 0, -18, "bush", "BushEastA")
+  kit.decor(sandbox, 18.5, 0, -20.5, "bush", "BushEastB")
+  kit.decor(sandbox, 22, 0, -14, "bush", "BushEastC")
+  kit.decor(sandbox, -21, 0, 13, "crystal", "ExcavationCrystalWest")
+  kit.decor(sandbox, 21, 0, 13, "crystal", "ExcavationCrystalEast")
 
   local use = Instance.new("BindableEvent")
   use.Name = "Use"
@@ -37,16 +76,13 @@ setup: |
   decoy.Name = "Decoy"
   decoy.Parent = sandbox
 
-  -- Two chests, so "unlocked the right one" is distinguishable from "unlocked
-  -- everything". A mechanic that opens every chest satisfies a single-chest
-  -- contract perfectly well, which is exactly the bug this pairing catches.
-  -- They are placed symmetrically and look identical on purpose: nothing in the
-  -- scene hints at which one a given key should open.
-  local chestA = kit.chest(sandbox, -6, 0, 5, "ChestA")
+  -- Matching chests keep the test honest; their architecture gives each one a
+  -- clear address without encoding the key match into the prop itself.
+  local chestA = kit.chest(sandbox, -8, 1, 7, "ChestA")
   chestA:SetAttribute("Locked", true)
   chestA:SetAttribute("KeyId", "KeyA")
 
-  local chestB = kit.chest(sandbox, 6, 0, 5, "ChestB")
+  local chestB = kit.chest(sandbox, 8, 1, 7, "ChestB")
   chestB:SetAttribute("Locked", true)
   chestB:SetAttribute("KeyId", "KeyB")
 

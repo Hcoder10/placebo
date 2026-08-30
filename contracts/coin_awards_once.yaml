@@ -22,44 +22,65 @@ setup: |
   kit.scene()
   kit.ground(sandbox, 120)
 
-  -- A route rather than a pile. Spawn on the low platform, two hops up to the
-  -- ledge where the coin sits: the coin is somewhere you have to travel to,
-  -- which is what makes collecting it read as an action rather than a state
-  -- change that happens to be nearby.
-  kit.platform(sandbox, 0, 0, -8, 20, 16, "StartPlatform")
-  kit.platform(sandbox, 0, 2, 8, 14, 12, "MidPlatform")
-  kit.platform(sandbox, 0, 4, 24, 14, 12, "Ledge")
-  kit.spawn(sandbox, 0, 0, -12, "Spawn")
+  -- A winding ascent through a half-buried sun court. The route bends west,
+  -- crosses back through the garden, then climbs toward the shrine; every rise
+  -- is 1.5 studs or less and every gap is 4 studs or less.
+  kit.platform(sandbox, 0, 0, -22, 24, 16, "StartPlatform")
+  kit.tint(kit.platform(sandbox, -10, 1.5, -8, 12, 10, "WestLanding"), "clay")
+  kit.platform(sandbox, -5, 2.5, 3, 14, 10, "GardenTurn")
+  kit.tint(kit.platform(sandbox, 4, 3.5, 12, 10, 8, "Bridge"), "clay")
+  kit.platform(sandbox, 0, 4, 23, 18, 12, "Ledge")
+  kit.platform(sandbox, -19, 2.5, 6, 8, 8, "WestLookout")
+  kit.tint(kit.platform(sandbox, 17, 1.5, -3, 10, 10, "EastOutcrop"), "clay")
+  kit.spawn(sandbox, 0, 0, -23, "Spawn")
 
-  kit.decor(sandbox, -14, 0, 0, "crystal", "Crystal")
-  kit.decor(sandbox, 14, 0, 4, "bush", "Bush")
+  -- The spawn is a real threshold: score stones behind you, lanterns ahead,
+  -- and broken perimeter walls that reveal the route in layers.
+  local board = kit.tint(kit.wall(sandbox, -6.5, 0, -29.5, 7, "x", "Scoreboard"), "cream")
+  board:SetAttribute("Coins", 0)
+
+  local other = kit.tint(kit.wall(sandbox, 6.5, 0, -29.5, 7, "x", "OtherScoreboard"), "slate")
+  other:SetAttribute("Coins", 0)
+
+  kit.wall(sandbox, -12.5, 0, -22, 16, "z", "StartWallWest")
+  kit.wall(sandbox, 12.5, 0, -22, 16, "z", "StartWallEast")
+  kit.wall(sandbox, -25, 0, -5, 30, "z", "RuinWallWest")
+  kit.wall(sandbox, 25, 0, 5, 34, "z", "RuinWallEast")
+  kit.wall(sandbox, -16.5, 0, -8, 10, "z", "LandingWall")
+
+  local lanternWest = kit.tint(kit.decor(sandbox, -9, 0, -16.5, "pillar", "EntryLanternWest"), "cream")
+  kit.light(lanternWest, "gold", 1.4, 12)
+  local lanternEast = kit.tint(kit.decor(sandbox, 9, 0, -16.5, "pillar", "EntryLanternEast"), "cream")
+  kit.light(lanternEast, "gold", 1.4, 12)
+
+  -- Plants occur in colonies, not as isolated props. The denser clusters sit
+  -- outside the route, while crystals mark its turns like blue trail lights.
+  kit.decor(sandbox, -20, 0, -26, "bush", "BushWestA")
+  kit.decor(sandbox, -16.5, 0, -27, "bush", "BushWestB")
+  kit.decor(sandbox, -22, 0, -22.5, "bush", "BushWestC")
+  kit.decor(sandbox, 19, 0, -16, "bush", "BushEastA")
+  kit.decor(sandbox, 22.5, 0, -13.5, "bush", "BushEastB")
+  kit.decor(sandbox, 18.5, 0, -11.5, "bush", "BushEastC")
+  kit.decor(sandbox, -13.5, 1.5, -10.5, "crystal", "TrailCrystalWest")
+  kit.decor(sandbox, 0, 2.5, 4, "crystal", "TrailCrystalTurn")
+
+  -- The side walls narrow the final terrace and the paired pillars frame the
+  -- gold pickup against the sky. It remains at standing height: walk into it.
+  kit.wall(sandbox, -9.5, 4, 23, 12, "z", "ShrineWallWest")
+  kit.wall(sandbox, 9.5, 4, 23, 12, "z", "ShrineWallEast")
+  kit.decor(sandbox, -5, 4, 27.5, "pillar", "ShrinePillarWest")
+  kit.decor(sandbox, 5, 4, 27.5, "pillar", "ShrinePillarEast")
+  kit.decor(sandbox, -6.5, 4, 20, "crystal", "ShrineCrystalWest")
+  kit.decor(sandbox, 6.5, 4, 20, "crystal", "ShrineCrystalEast")
+  kit.decor(sandbox, -6.5, 4, 25, "bush", "ShrineBushWest")
+  kit.decor(sandbox, 6.5, 4, 25, "bush", "ShrineBushEast")
 
   kit.coin(sandbox, 0, 4, 24, "Coin")
 
-  -- The readouts, as boards flanking the spawn. The kit constructors return the
-  -- instance, so the mechanic's own state goes onto what they hand back.
-  --
-  -- Cream for the player's own score and slate for the other player's: the
-  -- contract's whole point is that one of these must move and the other must
-  -- not, so they had better not look alike.
-  local board = kit.tint(kit.wall(sandbox, -7, 0, -14, 6, "x", "Scoreboard"), "cream")
-  board:SetAttribute("Coins", 0)
-
-  -- A second scoreboard, so "awarded the wrong player" is distinguishable from
-  -- "awarded nobody".
-  local other = kit.tint(kit.wall(sandbox, 7, 0, -14, 6, "x", "OtherScoreboard"), "slate")
-  other:SetAttribute("Coins", 0)
-
-  -- The collect signal. Studio's edit mode does not run physics, so the
-  -- mechanic is driven by an explicit server-authoritative event rather than a
-  -- physical Touched. The causal structure is identical: something fires, and
-  -- the world is supposed to move because of it.
   local collect = Instance.new("BindableEvent")
   collect.Name = "Collect"
   collect.Parent = sandbox
 
-  -- Built here so the unrelated_signal control does not have to create it, and
-  -- therefore does not differ structurally from the treatment.
   local decoy = Instance.new("BindableEvent")
   decoy.Name = "Decoy"
   decoy.Parent = sandbox
