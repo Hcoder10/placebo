@@ -148,10 +148,16 @@ try {
       'torso.Anchored = false torso.CanCollide = false',
       'torso.Position = coin.Position + Vector3.new(0, 14, 0)',
       'torso.Parent = rig rig.PrimaryPart = torso rig.Parent = workspace',
+      // The rig is unanchored and has to fall 14 studs. Studio throttles its
+      // physics step hard when the window is unfocused or the machine is busy,
+      // and a 4s budget was measured missing one drop in a run whose other two
+      // drops landed from the identical position -- a flaky proof that cries
+      // wolf. The elapsed time is reported so a near miss is visible rather
+      // than hidden by the larger budget.
       'local waited = 0',
-      'while waited < 4 and coin.Parent do task.wait(0.1) waited += 0.1 end',
+      'while waited < 10 and coin.Parent do task.wait(0.1) waited += 0.1 end',
       'rig:Destroy()',
-      'return string.format("touched=%s score=%s door=%s", tostring(coin.Parent == nil), tostring(sb.Scoreboard:GetAttribute("Coins")), tostring(sb.Door:GetAttribute("Open")))',
+      'return string.format("touched=%s in %.1fs score=%s door=%s", tostring(coin.Parent == nil), waited, tostring(sb.Scoreboard:GetAttribute("Coins")), tostring(sb.Door:GetAttribute("Open")))',
     ].join('\n'));
     await step('wait for respawn', `task.wait(2.5) return "coin back=" .. tostring(${sandbox}:FindFirstChild("Coin") ~= nil)`);
   }

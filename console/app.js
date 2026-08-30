@@ -69,13 +69,17 @@ function updateStory() {
     link.classList.toggle('is-active', link.dataset.depth === closest.dataset.zone);
   });
 
-  storyVideos.forEach((video, index) => {
-    const shouldPlay = !reducedMotion.matches
-      && document.visibilityState === 'visible'
-      && storyZones[index] === closest;
-    video.loop = true;
-    if (shouldPlay) video.play().catch(() => {});
-    else video.pause();
+  // Scrubbed by scroll, never self-playing.
+  //
+  // These were also `loop = true` and `play()`d whenever their zone was the
+  // closest one, while the block above simultaneously drove `currentTime` from
+  // scroll progress. The two fight: the video runs on its own clock and loops
+  // forever whether or not the reader is scrolling, which is exactly the
+  // "videos play repeatedly even without scrolling" complaint. Playback is the
+  // scroll position; there is nothing else for it to be.
+  storyVideos.forEach(video => {
+    video.loop = false;
+    if (!video.paused) video.pause();
   });
 }
 
@@ -496,7 +500,7 @@ window.addEventListener('popstate', () => {
 });
 
 storyVideos.forEach(video => {
-  video.loop = true;
+  video.loop = false;
   video.addEventListener('loadedmetadata', scheduleStoryUpdate, { once: true });
 });
 

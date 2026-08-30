@@ -505,6 +505,19 @@ app.get('/api/training', (_req, res) => {
   });
 });
 
+// The scraped-curriculum arm, read from the measurement the pipeline wrote.
+// Reported with its control, because the lift is only worth quoting next to it:
+// a note of identical shape naming a replacement the engine says does not exist
+// collapses acceptance to 5%, which is what rules out "the prompt got longer".
+app.get('/api/curriculum', (_req, res) => {
+  try {
+    const raw = readFileSync(join(ROOT, 'data', 'curriculum-measurement.json'), 'utf8');
+    res.json(JSON.parse(raw) as unknown);
+  } catch {
+    res.json({ available: false });
+  }
+});
+
 app.post('/api/reset', async (_req, res) => {
   for (const key of Object.keys(run.state.branches)) {
     delete run.state.branches[key];
