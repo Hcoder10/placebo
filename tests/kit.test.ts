@@ -10,6 +10,7 @@ import {
   PALETTE,
   PALETTE_TOLERANCE_RGB,
   PLAY_SCRIPT_SOURCE,
+  PRISTINE_LUAU,
   isOnGrid,
   luauLongString,
   nearestPaletteEntry,
@@ -190,6 +191,17 @@ describe('long strings', () => {
   });
 });
 
+/**
+ * The play layer with the restore chunk cut out of it: everything that reacts
+ * to a player, and nothing that resets the world. Removing the chunk by its own
+ * text means the two cannot drift -- if the chunk stops being embedded verbatim
+ * this returns the whole script and the no-SetAttribute check fails loudly.
+ */
+function playCodeWithoutRestore(): string {
+  expect(PLAY_SCRIPT_SOURCE).toContain(PRISTINE_LUAU);
+  return PLAY_SCRIPT_SOURCE.replace(PRISTINE_LUAU, '');
+}
+
 describe('the play layer', () => {
   it('is not part of the kit prelude or its bootstrap', () => {
     // The hard constraint. These are Scripts, and worldstate.ts watches Source,
@@ -235,7 +247,80 @@ describe('the play layer', () => {
     }
     // Output reacts to attributes; it must never set one, or the play layer
     // would be causing the effects the verifier attributes to the mechanic.
-    expect(PLAY_SCRIPT_SOURCE).not.toContain('SetAttribute');
+    //
+    // The restore chunk is the one exception and it is excluded here rather
+    // than exempted: it runs once at startup, before anything is wired, and
+    // the next test pins down that the only values it writes are ones it read
+    // back off the snapshot. Everything that reacts to play is still held to
+    // the original rule.
+    expect(playCodeWithoutRestore()).not.toContain('SetAttribute');
+  });
+
+  it('restores the built world only from the snapshot, never from a computed value', () => {
+    // What stops the restore being a back door for game rules. A write of
+    // `total + 1` here would be the play layer scoring, which is the mechanic's
+    // job and the thing the contracts prove.
+    expect(PRISTINE_LUAU).toContain('for key, value in pairs(template:GetAttributes()) do');
+    const writes = PRISTINE_LUAU.match(/SetAttribute\([^)]*\)/g) ?? [];
+    expect(writes).toEqual([
+      // The stamp that ties a snapshot to the world it came from. Written to
+      // both sides of the pair, and to nothing a mechanic reads.
+      'SetAttribute(STAMP, id)',
+      'SetAttribute(STAMP, id)',
+      'SetAttribute(key, nil)',
+      'SetAttribute(key, value)',
+    ]);
+  });
+
+  it('refuses to restore a snapshot taken from a different build', () => {
+    // Otherwise a snapshot that outlived its world puts back objects the newer
+    // build removed, silently. buildGame destroys the sandbox to rebuild it,
+    // which drops the stamp, so "rebuilt" and "stale" are the same signal.
+    expect(PRISTINE_LUAU).toContain('if not api.matches(sandbox) then return -1, -1 end');
+    expect(PRISTINE_LUAU).toContain('return id ~= nil and id == sandbox:GetAttribute(STAMP)');
+    // And the refusal is announced rather than silently treated as a no-op.
+    expect(PLAY_SCRIPT_SOURCE).toContain('if returned < 0 then');
+    expect(PLAY_SCRIPT_SOURCE).toContain('warn("[PlayLayer] the snapshot belongs to a different build');
+  });
+
+  it('puts the world back before it wires anything to it', () => {
+    // Order is the whole point: the coin a previous session collected has to be
+    // back before the wiring loop runs, or there is no trigger to attach to and
+    // the layer reports one fewer than the world has.
+    const restore = PLAY_SCRIPT_SOURCE.indexOf('pristine.restore(sandbox)');
+    const wire = PLAY_SCRIPT_SOURCE.indexOf('if descendant:IsA("BasePart") then attach(descendant) end');
+    expect(restore).toBeGreaterThan(-1);
+    expect(wire).toBeGreaterThan(restore);
+  });
+
+  it('rebuilds its own output devices instead of stacking them', () => {
+    // Measured before this: two Run()s left four readouts per scoreboard, and
+    // the pair from the dead session sat frozen on top of the live one.
+    expect(PLAY_SCRIPT_SOURCE).toContain('if existing.Name == "Readout" then existing:Destroy() end');
+    expect(PLAY_SCRIPT_SOURCE).toContain('if existing:IsA("ProximityPrompt") then existing:Destroy() end');
+    // And the snapshot never captures them, or they would come back on restore.
+    expect(PRISTINE_LUAU).toContain('if isPlayArtifact(extra) then extra:Destroy() end');
+  });
+
+  it('captures the snapshot when the play layer is installed', () => {
+    // Restore first, so installing onto a world a previous session mutated does
+    // not snapshot that mutation as the state every future session resets to.
+    const program = playableLuau();
+    const restore = program.indexOf('pristine.restore(sandbox)');
+    const capture = program.indexOf('pristine.capture(sandbox)');
+    expect(restore).toBeGreaterThan(-1);
+    expect(capture).toBeGreaterThan(restore);
+  });
+
+  it('keeps the snapshot out of the rendered world', () => {
+    // Anything parented under Workspace renders, so a spare copy of the level
+    // inside the level would be worse than the bug it fixes.
+    expect(PRISTINE_LUAU).toContain('game:GetService("ServerStorage")');
+    expect(PRISTINE_LUAU).toContain('folder.Parent = ServerStorage');
+  });
+
+  it('never snapshots the scripts it is about to reinstall', () => {
+    expect(PRISTINE_LUAU).toContain('if not child:IsA("LuaSourceContainer") then');
   });
 
   it('installs the accepted patch alongside the triggers', () => {

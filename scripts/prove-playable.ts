@@ -42,6 +42,28 @@ import { StudioSession } from './../src/verifier/studio.js';
  * reads as a missing Scoreboard rather than as someone else's rebuild.
  * `playableLuau` already takes a root; this is the other half of that.
  */
+/**
+ * Stop and Run are asynchronous, and a fixed `task.wait(1)` is not enough on a
+ * loaded machine. Measured: a run whose Stop had not landed yet reported
+ * `running=true`, and the next proof's `Run()` was then a no-op against a
+ * simulation that was already going -- so PlayLayer never restarted, the
+ * restore never fired, and the second run read `score=4` before it touched
+ * anything. Both transitions are polled to the state they asked for.
+ */
+const settle = (want: boolean): string => [
+  'local RunService = game:GetService("RunService")',
+  `local want = ${String(want)}`,
+  'if RunService:IsRunning() ~= want then',
+  '\tif want then RunService:Run() else RunService:Stop() end',
+  'end',
+  'local waited = 0',
+  'while RunService:IsRunning() ~= want and waited < 15 do task.wait(0.25) waited += 0.25 end',
+  // Scripts start on the frame after Run(), so the world is only worth reading
+  // once they have had a moment to do their startup work.
+  'if want then task.wait(1.5) end',
+  'return string.format("running=%s after %.2fs", tostring(RunService:IsRunning()), waited)',
+].join('\n');
+
 const ROOT = process.env.PLACEBO_ROOT ?? 'PlaceboSandbox';
 const sandbox = `workspace:FindFirstChild(${JSON.stringify(ROOT)})`;
 /** Fails with the root's name in the message rather than "not a valid member". */
@@ -102,7 +124,11 @@ try {
     'return string.format("coin=%s score=%s door=%s", tostring(c ~= nil), tostring(sb.Scoreboard:GetAttribute("Coins")), tostring(sb.Door:GetAttribute("Open")))',
   ].join('\n'));
 
-  await step('start simulation', 'game:GetService("RunService"):Run() task.wait(1.5) return "running=" .. tostring(game:GetService("RunService"):IsRunning())');
+  // Stopped first, then started. A simulation left running by a previous proof
+  // makes Run() a no-op, which silently invalidates everything after it.
+  await step('settle to edit', settle(false));
+  const started = await step('start simulation', settle(true));
+  expect('simulation started', started.startsWith('running=true') ? 'ok' : started, 'ok');
 
   // The play layer restores the built world as it starts, so this is read after
   // Run() rather than before it. A run that begins mid-game proves nothing, so
@@ -140,7 +166,10 @@ try {
   expect('one readout per face', readouts.startsWith('ok') ? 'ok' : readouts, 'ok');
   completed = true;
 } finally {
-  await step('stop simulation', 'game:GetService("RunService"):Stop() task.wait(1) return "running=" .. tostring(game:GetService("RunService"):IsRunning())');
+  // Leaving Studio simulating is not a tidy-up detail: it is what broke the
+  // next run, so it is a checked outcome rather than a best effort.
+  const stopped = await step('stop simulation', settle(false));
+  expect('left in edit mode', stopped.startsWith('running=false') ? 'ok' : stopped, 'ok');
   await s.close();
 
   if (failures.length > 0) {
