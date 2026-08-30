@@ -44,14 +44,8 @@ const SAMPLE_MODEL = process.env.PLACEBO_TARGET_MODEL ?? 'gpt-oss-20b';
 /** Draws per task per turn. Each one costs a full set of engine runs. */
 const SAMPLES_PER_TASK = Number(process.env.PLACEBO_SAMPLES ?? '12');
 
-export const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
-
-You are given a behavioural contract: an interaction, and the effects that
-interaction must cause. Write the mechanic so that the interaction is what
-causes them. An implementation whose end state looks right but which would look
-identical had the interaction never happened is wrong.
-
-Write only the Luau body. A folder named \`sandbox\` is already in scope.`;
+export { SYSTEM } from './prompt.js';
+import { SYSTEM } from './prompt.js';
 
 interface CorpusRow {
   /** Stable identity, so re-running a turn does not duplicate work. */
