@@ -142,7 +142,7 @@ adapted draft                 2.44 accepted length   18.0% acceptance   212.1 to
 
 Same endpoint, same GPU, same `--gpu-memory-utilization`, same flags. Only `--spec-model` differs.
 
-**The noise floor is why this is worth quoting.** The *same* released drafter was measured twice before anything was believed, and it returned 2.23 then 2.17. That puts run to run noise at about ±0.06, so **+0.27 is roughly 4x it**. Per-position acceptance improved everywhere after position 1, with the biggest gains in the tail:
+**What the comparison rests on, stated exactly.** The *same* released drafter was measured twice before anything was believed, and returned 2.23 then 2.17. Two runs give a range, not a standard deviation, so this is not a significance claim: what it establishes is that repeat variation on this rig is on the order of 0.06, and the adapted drafter sits 0.27 above the higher of the two released readings. One adapted run over eight prompts. Worth doing more of, and not yet a distribution. Per-position acceptance improved everywhere after position 1, with the biggest gains in the tail:
 
 ```
 released  518 -> 276 -> 134 -> 72 -> 48 -> 32 -> 15 -> 8
