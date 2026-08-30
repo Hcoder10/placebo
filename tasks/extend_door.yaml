@@ -19,14 +19,14 @@ setup: |
   -- readable from above and comfortably walkable at JumpPower 50.
   local route = {
     { 0, 0, -82, 34, 20, "EntryPlaza", "sand" },
-    { 0, 1.5, -68, 24, 10, "PilgrimStep", "clay" },
+    { 0, 1.5, -68, 24, 10, "PilgrimStep", "sand" },
     { -7, 3, -57, 28, 14, "WestRamp", "sand" },
-    { -10, 4.5, -42, 34, 16, "WestCourt", "clay" },
+    { -10, 4.5, -42, 34, 16, "WestCourt", "sand" },
     { -3, 6, -27, 24, 14, "SunCauseway", "sand" },
     { 0, 7.5, -10, 42, 20, "GreatSunCourt", "sand" },
-    { 0, 9, 6, 16, 14, "CanalBridge", "clay" },
+    { 0, 9, 6, 16, 14, "CanalBridge", "sand" },
     { 7, 10.5, 19, 26, 14, "EastRise", "sand" },
-    { 7, 12, 33, 34, 14, "UpperCourt", "clay" },
+    { 7, 12, 33, 34, 14, "UpperCourt", "sand" },
     { 0, 13, 49, 22, 18, "ShrineApproach", "sand" },
     { 0, 14, 67, 40, 18, "FinalSanctum", "sand" },
   }
@@ -37,14 +37,14 @@ setup: |
   -- Raised side districts make the city feel explorable rather than like a
   -- corridor. They also build a broad, asymmetric silhouette around the route.
   local districts = {
-    { -43, 3, -70, 30, 24, "WestGarden", "clay" },
+    { -43, 3, -70, 30, 24, "WestGarden", "sand" },
     { 43, 4.5, -52, 32, 28, "EastBazaar", "sand" },
     { -45, 7.5, -9, 34, 30, "MoonCourt", "sand" },
-    { 45, 9, 12, 30, 28, "EastReservoir", "clay" },
-    { -43, 10.5, 30, 32, 26, "ScholarRuins", "clay" },
+    { 45, 9, 12, 30, 28, "EastReservoir", "sand" },
+    { -43, 10.5, 30, 32, 26, "ScholarRuins", "sand" },
     { 43, 12, 46, 30, 24, "HighGarden", "sand" },
-    { -27, 14, 69, 14, 16, "WestTempleWing", "clay" },
-    { 27, 14, 69, 14, 16, "EastTempleWing", "clay" },
+    { -27, 14, 69, 14, 16, "WestTempleWing", "sand" },
+    { 27, 14, 69, 14, 16, "EastTempleWing", "sand" },
   }
   for _, district in ipairs(districts) do
     kit.tint(kit.platform(sandbox, district[1], district[2], district[3], district[4], district[5], district[6]), district[7])
@@ -61,18 +61,18 @@ setup: |
     { 26, 12, 40, 4, 6, "HighGardenBridge" },
   }
   for index, bridge in ipairs(districtBridges) do
-    kit.tint(kit.platform(sandbox, bridge[1], bridge[2], bridge[3], bridge[4], bridge[5], bridge[6]), index % 2 == 0 and "sand" or "clay")
+    kit.tint(kit.platform(sandbox, bridge[1], bridge[2], bridge[3], bridge[4], bridge[5], bridge[6]), index % 2 == 0 and "sand" or "slate")
   end
 
   -- Upper balconies sit on the surviving eight-stud ruin walls, giving every
   -- district a second storey and breaking the otherwise uniform roofline.
   local balconies = {
     { -50, 11, -70, "WestGardenBalcony", "sand" },
-    { 51, 12.5, -52, "EastBazaarBalcony", "clay" },
-    { -54, 15.5, -9, "MoonCourtBalcony", "clay" },
+    { 51, 12.5, -52, "EastBazaarBalcony", "sand" },
+    { -54, 15.5, -9, "MoonCourtBalcony", "sand" },
     { 53, 17, 12, "ReservoirBalcony", "sand" },
     { -52, 18.5, 30, "ScholarBalcony", "sand" },
-    { 51, 20, 46, "HighGardenBalcony", "clay" },
+    { 51, 20, 46, "HighGardenBalcony", "sand" },
   }
   for _, balcony in ipairs(balconies) do
     kit.tint(kit.platform(sandbox, balcony[1], balcony[2], balcony[3], 12, 8, balcony[4]), balcony[5])
@@ -101,12 +101,14 @@ setup: |
   -- into a box. Regular gaps reveal the landscape and create long shadows.
   for _, side in ipairs({ -92, 92 }) do
     for z = -72, 68, 28 do
-      kit.wall(sandbox, side, 0, z, 22, "z", "OuterRampart")
+      local rampart = kit.wall(sandbox, side, 0, z, 22, "z", "OuterRampart")
+      kit.tint(rampart, math.floor((z + 72) / 28) % 2 == 0 and "slate" or "sand")
     end
   end
   for _, z in ipairs({ -96, 88 }) do
     for x = -70, 70, 28 do
-      kit.wall(sandbox, x, 0, z, 22, "x", "OuterRampart")
+      local rampart = kit.wall(sandbox, x, 0, z, 22, "x", "OuterRampart")
+      kit.tint(rampart, math.floor((x + 70) / 28) % 2 == 0 and "slate" or "sand")
     end
   end
 
@@ -123,7 +125,7 @@ setup: |
   }
   for index, wall in ipairs(routeWalls) do
     local pilgrimWall = kit.wall(sandbox, wall[1], wall[2], wall[3], wall[4], wall[5], "PilgrimWall" .. index)
-    kit.tint(pilgrimWall, index % 4 == 0 and "clay" or "sand")
+    kit.tint(pilgrimWall, index % 4 == 0 and "slate" or "sand")
   end
 
   -- Each side district is a partial ruin: three surviving edges, an open side
@@ -138,7 +140,7 @@ setup: |
   }
   for index, wall in ipairs(districtWalls) do
     local districtWall = kit.wall(sandbox, wall[1], wall[2], wall[3], wall[4], wall[5], "DistrictRuin" .. index)
-    kit.tint(districtWall, index % 3 == 0 and "slate" or "clay")
+    kit.tint(districtWall, index % 3 == 0 and "slate" or "sand")
   end
 
   -- The Ember Canal cuts across the full city. Six separated neon pools and
@@ -207,7 +209,8 @@ setup: |
     { -7, 12, 34 }, { 8, 13, 49 }, { -15, 14, 62 }, { 15, 14, 62 },
   }
   for index, crystal in ipairs(crystals) do
-    kit.decor(sandbox, crystal[1], crystal[2], crystal[3], "crystal", "WayfinderCrystal" .. index)
+    local wayfinder = kit.decor(sandbox, crystal[1], crystal[2], crystal[3], "crystal", "WayfinderCrystal" .. index)
+    kit.light(wayfinder, "teal", 1.0, 11)
   end
 
   -- Gold is the reward language. These individually named pickups draw one
@@ -281,6 +284,138 @@ setup: |
   local canalEastBeacon = kit.tint(kit.decor(sandbox, 27, 33.5, -10, "crystal", "CanalGateEastBeacon"), "gold")
   kit.light(canalEastBeacon, "gold", 1.6, 16)
 
+  -- Every side district now announces its bridge with the same cream-column,
+  -- slate-lintel portal. Repeating one doorway grammar binds six unlike rooms
+  -- together while the teal lamps distinguish exploration from the gold goal.
+  kit.tint(kit.decor(sandbox, -31, 3, -63, "pillar", "WestGardenPortalNorth"), "cream")
+  kit.tint(kit.decor(sandbox, -31, 3, -55, "pillar", "WestGardenPortalSouth"), "cream")
+  kit.tint(kit.platform(sandbox, -31, 10, -59, 5, 11, "WestGardenPortalLintel"), "slate")
+  local westGardenPortalLamp = kit.decor(sandbox, -31, 10, -59, "crystal", "WestGardenPortalLamp")
+  kit.light(westGardenPortalLamp, "teal", 1.1, 12)
+
+  kit.tint(kit.decor(sandbox, 29, 4.5, -49, "pillar", "EastBazaarPortalNorth"), "cream")
+  kit.tint(kit.decor(sandbox, 29, 4.5, -41, "pillar", "EastBazaarPortalSouth"), "cream")
+  kit.tint(kit.platform(sandbox, 29, 11.5, -45, 5, 11, "EastBazaarPortalLintel"), "slate")
+  local eastBazaarPortalLamp = kit.decor(sandbox, 29, 11.5, -45, "crystal", "EastBazaarPortalLamp")
+  kit.light(eastBazaarPortalLamp, "teal", 1.1, 12)
+
+  kit.tint(kit.decor(sandbox, -30, 7.5, -17, "pillar", "MoonCourtPortalNorth"), "cream")
+  kit.tint(kit.decor(sandbox, -30, 7.5, -9, "pillar", "MoonCourtPortalSouth"), "cream")
+  kit.tint(kit.platform(sandbox, -30, 14.5, -13, 5, 11, "MoonCourtPortalLintel"), "slate")
+  local moonCourtPortalLamp = kit.decor(sandbox, -30, 14.5, -13, "crystal", "MoonCourtPortalLamp")
+  kit.light(moonCourtPortalLamp, "teal", 1.1, 12)
+
+  kit.tint(kit.decor(sandbox, 32, 9, 13, "pillar", "ReservoirPortalNorth"), "cream")
+  kit.tint(kit.decor(sandbox, 32, 9, 21, "pillar", "ReservoirPortalSouth"), "cream")
+  kit.tint(kit.platform(sandbox, 32, 16, 17, 5, 11, "ReservoirPortalLintel"), "slate")
+  local reservoirPortalLamp = kit.decor(sandbox, 32, 16, 17, "crystal", "ReservoirPortalLamp")
+  kit.light(reservoirPortalLamp, "teal", 1.1, 12)
+
+  kit.tint(kit.decor(sandbox, -29, 10.5, 26, "pillar", "ScholarPortalNorth"), "cream")
+  kit.tint(kit.decor(sandbox, -29, 10.5, 34, "pillar", "ScholarPortalSouth"), "cream")
+  kit.tint(kit.platform(sandbox, -29, 17.5, 30, 5, 11, "ScholarPortalLintel"), "slate")
+  local scholarPortalLamp = kit.decor(sandbox, -29, 17.5, 30, "crystal", "ScholarPortalLamp")
+  kit.light(scholarPortalLamp, "teal", 1.1, 12)
+
+  kit.tint(kit.decor(sandbox, 30, 12, 36, "pillar", "HighGardenPortalNorth"), "cream")
+  kit.tint(kit.decor(sandbox, 30, 12, 44, "pillar", "HighGardenPortalSouth"), "cream")
+  kit.tint(kit.platform(sandbox, 30, 19, 40, 5, 11, "HighGardenPortalLintel"), "slate")
+  local highGardenPortalLamp = kit.decor(sandbox, 30, 19, 40, "crystal", "HighGardenPortalLamp")
+  kit.light(highGardenPortalLamp, "teal", 1.1, 12)
+
+  -- Four compact roadside shrines occupy the former blank corners. Their
+  -- canopies echo the district balconies without competing with the tall gates.
+  kit.tint(kit.platform(sandbox, -74, 1, -52, 12, 10, "WestLowerWayshrineBase"), "sand")
+  kit.tint(kit.decor(sandbox, -78, 1, -52, "pillar", "WestLowerWayshrineOuter"), "cream")
+  kit.tint(kit.decor(sandbox, -70, 1, -52, "pillar", "WestLowerWayshrineInner"), "cream")
+  kit.tint(kit.platform(sandbox, -74, 8, -52, 12, 10, "WestLowerWayshrineCanopy"), "slate")
+  local westLowerWayshrineLamp = kit.decor(sandbox, -74, 8, -52, "crystal", "WestLowerWayshrineLamp")
+  kit.light(westLowerWayshrineLamp, "teal", 1.2, 13)
+
+  kit.tint(kit.platform(sandbox, 74, 1, -52, 12, 10, "EastLowerWayshrineBase"), "sand")
+  kit.tint(kit.decor(sandbox, 70, 1, -52, "pillar", "EastLowerWayshrineInner"), "cream")
+  kit.tint(kit.decor(sandbox, 78, 1, -52, "pillar", "EastLowerWayshrineOuter"), "cream")
+  kit.tint(kit.platform(sandbox, 74, 8, -52, 12, 10, "EastLowerWayshrineCanopy"), "slate")
+  local eastLowerWayshrineLamp = kit.decor(sandbox, 74, 8, -52, "crystal", "EastLowerWayshrineLamp")
+  kit.light(eastLowerWayshrineLamp, "teal", 1.2, 13)
+
+  kit.tint(kit.platform(sandbox, -74, 1, 52, 12, 10, "WestUpperWayshrineBase"), "sand")
+  kit.tint(kit.decor(sandbox, -78, 1, 52, "pillar", "WestUpperWayshrineOuter"), "cream")
+  kit.tint(kit.decor(sandbox, -70, 1, 52, "pillar", "WestUpperWayshrineInner"), "cream")
+  kit.tint(kit.platform(sandbox, -74, 8, 52, 12, 10, "WestUpperWayshrineCanopy"), "slate")
+  local westUpperWayshrineLamp = kit.decor(sandbox, -74, 8, 52, "crystal", "WestUpperWayshrineLamp")
+  kit.light(westUpperWayshrineLamp, "teal", 1.2, 13)
+
+  kit.tint(kit.platform(sandbox, 74, 1, 52, 12, 10, "EastUpperWayshrineBase"), "sand")
+  kit.tint(kit.decor(sandbox, 70, 1, 52, "pillar", "EastUpperWayshrineInner"), "cream")
+  kit.tint(kit.decor(sandbox, 78, 1, 52, "pillar", "EastUpperWayshrineOuter"), "cream")
+  kit.tint(kit.platform(sandbox, 74, 8, 52, 12, 10, "EastUpperWayshrineCanopy"), "slate")
+  local eastUpperWayshrineLamp = kit.decor(sandbox, 74, 8, 52, "crystal", "EastUpperWayshrineLamp")
+  kit.light(eastUpperWayshrineLamp, "teal", 1.2, 13)
+
+  -- A lighter inner rampart creates actual side corridors between the shrines
+  -- and the dark perimeter instead of one undifferentiated empty lawn.
+  kit.tint(kit.wall(sandbox, -82, 0, -58, 16, "z", "InnerRampartWestLowerA"), "sand")
+  kit.tint(kit.wall(sandbox, -82, 0, -28, 16, "z", "InnerRampartWestLowerB"), "slate")
+  kit.tint(kit.wall(sandbox, -82, 0, 2, 16, "z", "InnerRampartWestMiddle"), "sand")
+  kit.tint(kit.wall(sandbox, -82, 0, 32, 16, "z", "InnerRampartWestUpperA"), "slate")
+  kit.tint(kit.wall(sandbox, -82, 0, 62, 16, "z", "InnerRampartWestUpperB"), "sand")
+  kit.tint(kit.wall(sandbox, 82, 0, -58, 16, "z", "InnerRampartEastLowerA"), "sand")
+  kit.tint(kit.wall(sandbox, 82, 0, -28, 16, "z", "InnerRampartEastLowerB"), "slate")
+  kit.tint(kit.wall(sandbox, 82, 0, 2, 16, "z", "InnerRampartEastMiddle"), "sand")
+  kit.tint(kit.wall(sandbox, 82, 0, 32, 16, "z", "InnerRampartEastUpperA"), "slate")
+  kit.tint(kit.wall(sandbox, 82, 0, 62, 16, "z", "InnerRampartEastUpperB"), "sand")
+
+  -- Continuous one-stud-high arcades now join each pair of wayshrines. Open
+  -- terraces alternate with a roofed middle bay, giving both outer lawns a
+  -- secondary walk and the density of a lived-in citadel quarter.
+  kit.tint(kit.platform(sandbox, -74, 1, -30, 14, 24, "WestArcadeLower"), "sand")
+  kit.tint(kit.platform(sandbox, -74, 1, 0, 14, 24, "WestArcadeMiddle"), "sand")
+  kit.tint(kit.platform(sandbox, -74, 1, 30, 14, 24, "WestArcadeUpper"), "sand")
+  kit.tint(kit.platform(sandbox, -74, 1, -44, 12, 6, "WestArcadeLowerLink"), "slate")
+  kit.tint(kit.platform(sandbox, -74, 1, 44, 12, 6, "WestArcadeUpperLink"), "slate")
+  kit.tint(kit.platform(sandbox, -74, 8, 0, 14, 16, "WestArcadeCanopy"), "slate")
+  kit.tint(kit.decor(sandbox, -68, 1, -38, "pillar", "WestArcadeColumnLowerA"), "cream")
+  kit.tint(kit.decor(sandbox, -68, 1, -22, "pillar", "WestArcadeColumnLowerB"), "cream")
+  kit.tint(kit.decor(sandbox, -68, 1, -8, "pillar", "WestArcadeColumnMiddleA"), "cream")
+  kit.tint(kit.decor(sandbox, -68, 1, 8, "pillar", "WestArcadeColumnMiddleB"), "cream")
+  kit.tint(kit.decor(sandbox, -68, 1, 22, "pillar", "WestArcadeColumnUpperA"), "cream")
+  kit.tint(kit.decor(sandbox, -68, 1, 38, "pillar", "WestArcadeColumnUpperB"), "cream")
+  local westArcadeLowerLamp = kit.decor(sandbox, -74, 1, -30, "crystal", "WestArcadeLowerLamp")
+  kit.light(westArcadeLowerLamp, "teal", 1.0, 11)
+  local westArcadeMiddleLamp = kit.decor(sandbox, -74, 8, 0, "crystal", "WestArcadeMiddleLamp")
+  kit.light(westArcadeMiddleLamp, "teal", 1.2, 13)
+  local westArcadeUpperLamp = kit.decor(sandbox, -74, 1, 30, "crystal", "WestArcadeUpperLamp")
+  kit.light(westArcadeUpperLamp, "teal", 1.0, 11)
+
+  kit.tint(kit.platform(sandbox, 74, 1, -30, 14, 24, "EastArcadeLower"), "sand")
+  kit.tint(kit.platform(sandbox, 74, 1, 0, 14, 24, "EastArcadeMiddle"), "sand")
+  kit.tint(kit.platform(sandbox, 74, 1, 30, 14, 24, "EastArcadeUpper"), "sand")
+  kit.tint(kit.platform(sandbox, 74, 1, -44, 12, 6, "EastArcadeLowerLink"), "slate")
+  kit.tint(kit.platform(sandbox, 74, 1, 44, 12, 6, "EastArcadeUpperLink"), "slate")
+  kit.tint(kit.platform(sandbox, 74, 8, 0, 14, 16, "EastArcadeCanopy"), "slate")
+  kit.tint(kit.decor(sandbox, 68, 1, -38, "pillar", "EastArcadeColumnLowerA"), "cream")
+  kit.tint(kit.decor(sandbox, 68, 1, -22, "pillar", "EastArcadeColumnLowerB"), "cream")
+  kit.tint(kit.decor(sandbox, 68, 1, -8, "pillar", "EastArcadeColumnMiddleA"), "cream")
+  kit.tint(kit.decor(sandbox, 68, 1, 8, "pillar", "EastArcadeColumnMiddleB"), "cream")
+  kit.tint(kit.decor(sandbox, 68, 1, 22, "pillar", "EastArcadeColumnUpperA"), "cream")
+  kit.tint(kit.decor(sandbox, 68, 1, 38, "pillar", "EastArcadeColumnUpperB"), "cream")
+  local eastArcadeLowerLamp = kit.decor(sandbox, 74, 1, -30, "crystal", "EastArcadeLowerLamp")
+  kit.light(eastArcadeLowerLamp, "teal", 1.0, 11)
+  local eastArcadeMiddleLamp = kit.decor(sandbox, 74, 8, 0, "crystal", "EastArcadeMiddleLamp")
+  kit.light(eastArcadeMiddleLamp, "teal", 1.2, 13)
+  local eastArcadeUpperLamp = kit.decor(sandbox, 74, 1, 30, "crystal", "EastArcadeUpperLamp")
+  kit.light(eastArcadeUpperLamp, "teal", 1.0, 11)
+
+  -- The final pair becomes one monumental gate: a high slate lintel touches
+  -- both tower crowns and supports a small cream-and-gold solar crest.
+  kit.tint(kit.platform(sandbox, 0, 39, 73, 40, 4, "SunGateHighLintel"), "slate")
+  kit.tint(kit.decor(sandbox, -11, 39, 73, "pillar", "SunGateCrestWest"), "cream")
+  kit.tint(kit.decor(sandbox, 11, 39, 73, "pillar", "SunGateCrestEast"), "cream")
+  kit.tint(kit.platform(sandbox, 0, 47, 73, 28, 4, "SunGateCrestBeam"), "sand")
+  local sunGateCrest = kit.tint(kit.decor(sandbox, 0, 47, 73, "crystal", "SunGateCrest"), "gold")
+  kit.light(sunGateCrest, "gold", 2.2, 21)
+
   -- The final landmark: two thirty-two-stud slate towers, glowing foreground
   -- pylons, and a stepped crown. It is tall enough to anchor the skyline from
   -- spawn while leaving the central gate opening unmistakable.
@@ -299,7 +434,7 @@ setup: |
     local beacon = kit.tint(kit.decor(sandbox, side * 27, 48, 73, "crystal", "CrownBeacon"), "gold")
     kit.light(beacon, "gold", 2.4, 22)
   end
-  kit.tint(kit.platform(sandbox, 0, 14, 80, 10, 8, "SunSpirePlinth"), "clay")
+  kit.tint(kit.platform(sandbox, 0, 14, 80, 10, 8, "SunSpirePlinth"), "sand")
   for level = 0, 4 do
     kit.tint(kit.decor(sandbox, 0, 14 + level * 6, 82, "pillar", "SunSpire"), level == 4 and "gold" or "cream")
   end
