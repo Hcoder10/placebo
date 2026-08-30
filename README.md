@@ -12,13 +12,33 @@ Most "AI writes code" demos show you a green checkmark. A green checkmark is exa
 
 # Why this should win
 
-1. **Tests confirm state. This confirms causation.** Placebo runs a treatment and a matched control inside Roblox Studio, then keeps only what the interaction caused. `reward_hack_preset_score` sets the score to the right number and is rejected with `no causal effect (identical to control)`. Every launch test and state assertion on earth passes that patch.
-2. **The verdicts are gated on their own integrity.** A result is withheld unless the two conditions actually started from the same world (`iso`) and the world had stopped moving when observed (`settled`). Those columns are printed, not assumed.
-3. **Scraped web data measurably improves the model, with a placebo arm.** Bright Data scrapes Roblox deprecations, the engine throws out 3 of 4 claims, and the survivor lifts acceptance **45.0% to 66.7% (p = 0.027)**. A control note of identical shape naming a replacement the engine says does not exist scores **5%**, which is what rules out "the prompt just got longer".
+1. **The harness is the experiment.** Four counterfactual branches run as TrueForge subagents with no access to each other, so the arms are independent structurally rather than by convention. They reach real tools over MCP, execute inside a game engine, and stop for a person before anything irreversible. `npm run run:agent run 4`.
+2. **Tests confirm state. This confirms causation.** Placebo runs a treatment and a matched control inside Roblox Studio, then keeps only what the interaction caused. `reward_hack_preset_score` sets the score to the right number and is rejected with `no causal effect (identical to control)`. Every launch test and state assertion on earth passes that patch.
+3. **The verdicts are gated on their own integrity.** A result is withheld unless the two conditions actually started from the same world (`iso`) and the world had stopped moving when observed (`settled`). Those columns are printed, not assumed.
+4. **Scraped web data measurably improves the model, with a placebo arm.** Bright Data scrapes Roblox deprecations, the engine throws out 3 of 4 claims, and the survivor lifts acceptance **45.0% to 66.7% (p = 0.027)**. A control note of identical shape naming a replacement the engine says does not exist scores **5%**, which is what rules out "the prompt just got longer".
 
-# How to experience it in 5 minutes
+# How to experience it in 7 minutes
 
-**1. Watch it reject a reward hack** (60s)
+**1. The harness runs the experiment** (2 min)
+
+```bash
+npm run run:agent run 4
+```
+
+TrueForge fans four counterfactual branches out as **subagents**, one per candidate patch. Each has no access to the parent conversation or to its siblings, so the arms cannot correlate. Each reaches real tools over MCP (`contract_get`, `predict_effect`, `patch_propose`, `causal_verify`), predicts what its patch will cause before running it, and is scored on that prediction against the engine.
+
+It **stops for a person**. `publish_place` is annotated `@destructive`, TrueForge resolves that into an approval gate, and the run pauses until someone decides:
+
+```
+  approval required: publish_place
+  approve? [y/N]
+```
+
+Nothing publishes without that. `assertGated()` refuses to start the run at all if a tool that should be gated is not, which is how we found the Roblox bridge shipping 134 tools with no annotations, every one silently exempt.
+
+Code executes inside **Roblox Studio**, in a sandbox folder rebuilt from nothing before every condition. That is a stronger isolation boundary than a process sandbox: a patch cannot see the previous run's world because there isn't one.
+
+**2. Watch it reject a reward hack** (60s)
 
 ```bash
 npm run verify
@@ -34,7 +54,7 @@ missing_destroy            REJECT  missing [exists:Coin]
 7/7 cases scored as expected
 ```
 
-**2. Watch it build a game** (90s)
+**3. Watch it build a game** (90s)
 
 ```bash
 npm run build:game
@@ -42,7 +62,7 @@ npm run build:game
 
 Mechanics accrete one at a time. Step 2 prints `PASS kept coin_awards_once` before `PASS gained door_opens_at_three`. The regression set is verified, not assumed.
 
-**3. Watch the game play itself** (60s)
+**4. Watch the game play itself** (60s)
 
 ```bash
 npm run playable && npm run prove:playable
@@ -60,7 +80,7 @@ played clean, and left a world the next run can play again
 
 Or press F5 and walk into the coin yourself.
 
-**4. Open the console** (30s)
+**5. Open the console** (30s)
 
 ```bash
 npm run mcp     # then http://localhost:9400/
@@ -68,7 +88,7 @@ npm run mcp     # then http://localhost:9400/
 
 Live run state, approval gates, and the training numbers straight off disk.
 
-**5. Watch the scraper repair itself and get overruled** (45s)
+**6. Watch the scraper repair itself and get overruled** (45s)
 
 ```bash
 npx tsx src/bright/cli.ts --break --repair       # recovers from a page redesign by shape, not selectors

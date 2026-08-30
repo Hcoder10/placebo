@@ -28,7 +28,9 @@ try {
 
 const BASE_URL = process.env.TRUEFORGE_BASE_URL ?? 'http://localhost:8790';
 const MCP_HOST = process.env.PLACEBO_MCP_HOST ?? 'http://localhost:9400';
-const MODEL = process.env.PLACEBO_MODEL ?? 'openai/gpt-5.4-mini';
+// The model TrueForge actually has registered here. Anything else 404s at
+// session creation, which reads as a harness failure rather than a config one.
+const MODEL = process.env.PLACEBO_MODEL ?? 'selfhosted/gpt-oss-20b';
 
 /** Tools that must never be exempt from approval. */
 const MUST_BE_GATED = ['patch_propose', 'publish_place'];
