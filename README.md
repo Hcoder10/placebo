@@ -96,20 +96,23 @@ gpt-oss-20b   build_coin    29/40
 So the model reaches for the right objects four times out of five. Roughly **one patch in thirty survives causal verification**.
 
 That distance is the entire argument. The failure is almost never "it ignored the world". It is code that connects to the right event, reads the right attribute, and still does not cause the effect the contract asks for: it awards before checking the coin exists, it awards on any signal rather than that one, it writes the value the test wants without the interaction being what wrote it. Those all look correct in review, and every one of them is rejected here by a control that produced the same state without the interaction.
-## Why the harness is load bearing
+## Where the harness actually is
 
-A causal test needs two arms that cannot contaminate each other. That is not a nice property, it is the whole experiment: if the branch that writes the treatment can see what the control did, the arms are correlated and the difference means nothing.
+Be precise about this, because it is easy to overclaim.
 
-TrueForge gives that for free. Each counterfactual branch is a subagent with **no access to the parent conversation or to its siblings**, so the arms are independent by construction rather than by convention. In a single chat loop, contamination is the default and you would have to argue your way out of it.
+**`npm run run:agent` is the harness flow.** It fans counterfactual branches out as TrueForge subagents, one per candidate patch, each with no access to the parent conversation or to its siblings ([`src/orchestrator/spec.ts`](src/orchestrator/spec.ts) sets `dynamic_sub_agents: { enabled: true }`). Independence between arms is structural there: a branch cannot read what another branch wrote, so the arms cannot correlate. It reaches real tools over MCP, and `publish_place` stops for a person.
 
-Two more things it does that the project depends on:
+**`npm run verify` and `npm run build:game` do not use the harness.** They call the verifier directly and run treatment and control as sequential calls in [`src/verifier/effect.ts`](src/verifier/effect.ts). They are the fastest way to see the idea, which is why they lead the demo, and they would work with no harness at all.
 
-**Approval gating from tool annotations.** `patch_propose` and `world_build` are `@write`, `publish_place` is `@destructive`, and TrueForge resolves those from the MCP `readOnlyHint` and `destructiveHint` fields. That surfaced a real problem: the Roblox bridge exposes **134 tools with no annotations at all**, which silently exempts every one of them from approval. Any harness that trusts annotations inherits that. `assertGated()` now refuses to start a run if a tool that should be gated is not.
+So: the causal verifier is harness independent by design, and the harness is what turns it into a controlled fan-out over many candidate patches at once, with approval gating and a replayable event log. Two other things the project actually leaned on:
 
-**A session, turn and event model you can read after the fact.** Every branch's tool calls and responses are queryable, which is how three separate bugs in this repo were found: a tool name arriving as `call_tool<|channel|>commentary` from a streaming parser, a model omitting a required `id` field, and a run that silently rebuilt the shared world underneath another run's experiment.
+**Approval gating from tool annotations.** `patch_propose` and `world_build` are `@write`, `publish_place` is `@destructive`, resolved by TrueForge from MCP `readOnlyHint` and `destructiveHint`. That surfaced a real problem: the Roblox bridge exposes **134 tools with no annotations at all**, silently exempting every one from approval. `assertGated()` now refuses to start a run if a tool that should be gated is not.
+
+**A replayable event log.** Every branch's tool calls and responses are queryable after the fact, which is how three bugs were found: a tool name arriving as `call_tool<|channel|>commentary` out of a streaming parser, a model omitting a required `id`, and a run silently rebuilding the shared world underneath another run's experiment.
+
 ## Post-training: a drafter we trained on our own traces
 
-Speculative decoding pays exactly as well as the draft model predicts the target. The released general-purpose DFlash drafter accepts **2.17 of 8** tokens on this workload. We collected 787 traces from our own target, reconstructed the training objective from the checkpoint's `spec_generate` loop (z-lab ship inference code only), and trained a drafter on them.
+Speculative decoding pays exactly as well as the draft model predicts the target. Accepted length here counts the target's own guaranteed token plus the draft tokens it accepted, which is the figure vLLM reports. The released general-purpose drafter sits at **2.17**, so roughly **1.17 of its 8 drafted tokens** survive. We collected 787 traces from our own target, reconstructed the training objective from the checkpoint's `spec_generate` loop (z-lab ship inference code only), and trained a drafter on them.
 
 ```
 released draft, first run     2.23 accepted length   15.4% acceptance   139.6 tok/s
@@ -128,7 +131,51 @@ adapted   506 -> 300 -> 169 -> 79 -> 57 -> 41 -> 33 -> 20
 
 Throughput went 209.2 to 212.1, which is inside the noise. Accepted length moved 12% and wall clock did not, because on a GPU that is not bandwidth starved the verification step was never the bottleneck.
 
-The 8 evaluation prompts were held out of the 197-prompt training corpus. A separate check that the reconstruction is correct: the offline instrument scores the *released* checkpoint at 2.120 against a live 2.17 to 2.23, where a wrong block mask or offset would sit near 1.0.
+The 8 evaluation prompts were held out of the 197-prompt training corpus.
+
+### What we could not finish
+
+Post-training the 20B itself did not reach a scale where a gain could show. We
+trained a LoRA on engine-labelled preference pairs three times, at 25, 76 and
+104 pairs. Published DPO runs use tens of thousands; a narrow behavioural shift
+starts appearing around one to five thousand. The blockers were concrete: one
+workstation GPU shared between the serving endpoint and the trainer, a driver
+fault that blocked every new CUDA process for an hour mid-session, and a corpus
+that grows at the speed of engine adjudication because every candidate costs a
+full world rebuild per condition per realization.
+
+Measured on a held-out check with the world inventory supplied, the base model
+uses the given interface **80.7% of the time (96/119, 95% CI 72.7-86.8)**. The
+104-pair adapter measures **53.3% (64/120, 95% CI 44.4-62.0)**, so at this data
+scale preference training moved the model in the wrong direction and the
+intervals do not overlap. `rewards/accuracies` hit 1.0 during training, which is
+what overfitting on a hundred pairs looks like.
+
+The pipeline is the deliverable, not that number. It samples from the target,
+adjudicates every draw against a live engine, exports preference pairs whose
+labels are measured causal differences rather than human opinion, trains, and
+serves the result on the same endpoint. `npm run flywheel` runs one turn of it.
+The drafter above is the same loop applied to a model small enough that the
+data we could collect was enough, and there it worked. A separate check that the reconstruction is correct: the offline instrument scores the *released* checkpoint at 2.120 against a live 2.17 to 2.23, where a wrong block mask or offset would sit near 1.0.
+## Qodo Code Review Evidence
+
+Qodo reviewed every pull request in this repo. All three are merged.
+
+| PR | What it reviewed | Result |
+|---|---|---|
+| [#3](https://github.com/Hcoder10/placebo/pull/3) | the visual kit, appearance verification, model-sampled candidates | **8 bugs found, all 8 real, all 8 fixed, re-review clean (0 bugs)** |
+| [#2](https://github.com/Hcoder10/placebo/pull/2) | engine gotchas and contributor docs | 0 bugs, 0 rule violations |
+| [#1](https://github.com/Hcoder10/placebo/pull/1) | counterfactual branch fan-out through the harness | reviewed and merged |
+
+The finding worth reading is the first one on PR #3, **"Empty designs pass inspection"**:
+
+> `analyzeParts` derives acceptance only from checks that all pass for an empty or bootstrap-ground-only scene. A model can therefore call `world_build` with no meaningful content and satisfy the new mandatory `design_check` gate.
+
+Acceptance was `checks.every(check => check.pass)`, and every check is vacuous on a world with nothing in it. Build nothing, pass everything. A test in our own suite codified accepting a scene with zero parts.
+
+That is exactly the failure the contract auditor exists to prevent on the correctness side: a specification satisfiable with no implementation at all is rejected as trivial. We had that argument written down, implemented and tested, then built a second gate for appearance and left the identical hole in it. There is now an `authored_content` check, and the ground plane the kit bootstraps in does not count as authored.
+
+The rest: rotated parts flagged as overlapping because their bounding boxes intersect, a lighting check that passed on any Atmosphere while ignoring the brightness it had already read, repair strings built with unescaped dot notation so a part named `My Door` emitted a command that cannot run, and candidate identity keyed on id rather than code so one program was evaluated and stored twice.
 ## Measured
 
 | | |
