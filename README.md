@@ -81,6 +81,28 @@ A launch test asks "did it run". A state assertion asks "is the number right". N
 
 Placebo asks it the way an experiment does. Build the world from nothing. Run the interaction in the treatment and not in the control. Snapshot both. The causal effect is the difference, and anything present in both is discarded no matter how correct it looks.
 
+## Post-training: a drafter we trained on our own traces
+
+Speculative decoding pays exactly as well as the draft model predicts the target. The released general-purpose DFlash drafter accepts **2.17 of 8** tokens on this workload. We collected 787 traces from our own target, reconstructed the training objective from the checkpoint's `spec_generate` loop (z-lab ship inference code only), and trained a drafter on them.
+
+```
+released draft, first run     2.23 accepted length   15.4% acceptance   139.6 tok/s
+released draft, re-measured   2.17 accepted length   14.6% acceptance   209.2 tok/s
+adapted draft                 2.44 accepted length   18.0% acceptance   212.1 tok/s
+```
+
+Same endpoint, same GPU, same `--gpu-memory-utilization`, same flags. Only `--spec-model` differs.
+
+**The noise floor is why this is worth quoting.** The *same* released drafter was measured twice before anything was believed, and it returned 2.23 then 2.17. That puts run to run noise at about ±0.06, so **+0.27 is roughly 4x it**. Per-position acceptance improved everywhere after position 1, with the biggest gains in the tail:
+
+```
+released  518 -> 276 -> 134 -> 72 -> 48 -> 32 -> 15 -> 8
+adapted   506 -> 300 -> 169 -> 79 -> 57 -> 41 -> 33 -> 20
+```
+
+Throughput went 209.2 to 212.1, which is inside the noise. Accepted length moved 12% and wall clock did not, because on a GPU that is not bandwidth starved the verification step was never the bottleneck.
+
+The 8 evaluation prompts were held out of the 197-prompt training corpus. A separate check that the reconstruction is correct: the offline instrument scores the *released* checkpoint at 2.120 against a live 2.17 to 2.23, where a wrong block mask or offset would sit near 1.0.
 ## Measured
 
 | | |
