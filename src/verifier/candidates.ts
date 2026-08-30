@@ -20,7 +20,19 @@ export interface Candidate {
   id: string;
   /** What a reader should understand this candidate to be doing wrong. */
   defect: string;
-  correct: boolean;
+  /**
+   * What a human expected the verdict to be, where a human had an expectation.
+   *
+   * Undefined means nobody predicted anything -- which is the honest state for
+   * a candidate sampled from the model rather than written by hand. The
+   * distinction matters because this field is what the calibration harness
+   * checks the verifier against: a sampled candidate labelled from the
+   * verifier's own verdict would be scored as evidence that the verifier agrees
+   * with itself. Leaving it undefined keeps those rows out of the calibration
+   * set while still letting them into the training corpus, where the verdict is
+   * the label and no prior expectation is needed.
+   */
+  correct?: boolean;
   luau: string;
 }
 
@@ -302,5 +314,22 @@ end)
 
 /** The candidate pool appropriate to a task. */
 export function candidatesFor(task: Task): Candidate[] {
-  return task.contracts.some(path => path.includes('door')) ? DOOR_CANDIDATES : COIN_CANDIDATES;
+  // Empty, not "the coin ones", when nothing matches.
+  //
+  // This used to fall through to COIN_CANDIDATES for any task that was not the
+  // door, which is fine while the only tasks are coin and door and quietly
+  // wrong the moment there is a third. Running the flywheel on a generated
+  // deprecation task injected twelve coin-mechanic programs as its negatives
+  // and produced sixty preference pairs teaching the model that coin code is
+  // the wrong answer to an API-migration prompt. They were not wrong exactly --
+  // the engine did reject them -- which is what makes it the bad kind of bug:
+  // every row was correctly labelled and the whole set was meaningless.
+  //
+  // A task with no hand-authored candidates now contributes none. Sampling from
+  // the model supplies its candidates instead, which is where they should come
+  // from for anything the author did not anticipate.
+  const contracts = task.contracts.join(' ');
+  if (contracts.includes('door')) return DOOR_CANDIDATES;
+  if (contracts.includes('coin')) return COIN_CANDIDATES;
+  return [];
 }

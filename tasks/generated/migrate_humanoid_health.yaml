@@ -1,0 +1,90 @@
+# GENERATED from a scraped claim that survived engine adjudication.
+#
+# Source:   https://create.roblox.com/docs/reference/engine/deprecations
+#           fetched via fixture at 2026-08-29T23:58:39.105Z
+# Claim:    Humanoid.Health is deprecated in favour of Humanoid.MaxHealth
+# Engine:   Humanoid.Health and Humanoid.MaxHealth both resolve in this engine
+#
+# Regenerate with:  npx tsx src/train/curriculum_train.ts
+id: migrate_humanoid_health
+mode: repair
+goal: >-
+  The refill handler runs, but the readouts never move: it reads
+  Humanoid.Health, which the deprecation feed reports as superseded, and that is
+  already the value each readout shows. Rewrite the handler to read the member
+  that replaced it, so every readout shows its subject's rated capacity instead.
+  Change nothing else.
+
+# Byte-identical to the setup in the generated contract, because a task
+# overrides its contracts' setup and the two drifting apart would mean the
+# contract said one thing standalone and another inside the task. Both come from
+# renderSetup, so they cannot drift.
+setup: |
+  kit.scene()
+  kit.ground(sandbox, 110)
+
+  kit.platform(sandbox, 0, 0, 0, 24, 18, "Deck")
+  kit.spawn(sandbox, 0, 0, -10, "Spawn")
+  kit.decor(sandbox, -16, 0, 6, "crystal", "Crystal")
+  kit.decor(sandbox, 16, 0, 6, "bush", "Bush")
+
+  -- The subjects, seeded in the order the engine was measured to accept:
+  -- Humanoid.MaxHealth first, then Humanoid.Health. probeSeparability
+  -- found this is the order under which both members keep distinct values; the
+  -- other one collapses them onto the same number.
+  --
+  -- Each readout starts at the value the DEPRECATED member holds, which is what
+  -- makes the required change a delta nothing in the prompt gives away: the model
+  -- never sees this block, so it cannot learn the absolute a readout has to reach.
+  local subjectA = Instance.new("Humanoid")
+  subjectA.Name = "SubjectA"
+  subjectA.Parent = sandbox
+  subjectA.MaxHealth = 100
+  subjectA.Health = 25
+
+  local readoutA = kit.tint(kit.wall(sandbox, -9, 0, -14, 6, "x", "ReadoutA"), "cream")
+  readoutA:SetAttribute("Value", 25)
+
+  local subjectB = Instance.new("Humanoid")
+  subjectB.Name = "SubjectB"
+  subjectB.Parent = sandbox
+  subjectB.MaxHealth = 90
+  subjectB.Health = 40
+
+  local readoutB = kit.tint(kit.wall(sandbox, 9, 0, -14, 6, "x", "ReadoutB"), "slate")
+  readoutB:SetAttribute("Value", 40)
+
+  local spare = kit.tint(kit.wall(sandbox, 0, 0, 16, 6, "z", "SpareReadout"), "slate")
+  spare:SetAttribute("Value", 0)
+
+  -- Studio's edit mode runs no physics, so the mechanic is driven by an explicit
+  -- server-authoritative event rather than a physical Touched. The causal
+  -- structure is identical: something fires, and the world is supposed to move
+  -- because of it.
+  local refill = Instance.new("BindableEvent")
+  refill.Name = "Refill"
+  refill.Parent = sandbox
+
+  -- Built here rather than inside the control, so the control differs from the
+  -- treatment in the interaction alone and not in the world's structure.
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
+# The defective implementation: wired correctly, reading the wrong member. That
+# is the shape a deprecation actually leaves behind in a codebase.
+baseline: |
+  local subjectA = sandbox.SubjectA
+  local readoutA = sandbox.ReadoutA
+  local subjectB = sandbox.SubjectB
+  local readoutB = sandbox.ReadoutB
+
+  sandbox.Refill.Event:Connect(function()
+    readoutA:SetAttribute("Value", subjectA.Health)
+    readoutB:SetAttribute("Value", subjectB.Health)
+  end)
+
+contracts:
+  - ../../contracts/generated/migrate_humanoid_health.yaml
+
+already_satisfied: []

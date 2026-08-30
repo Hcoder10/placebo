@@ -1,0 +1,110 @@
+id: repair_key
+mode: repair
+goal: >-
+  The chest mechanic is wired up and does something, but it is wrong: any key
+  opens every chest. Fix it so a key opens only the chest it belongs to.
+
+# The world every contract in this task shares.
+#
+# Built through `kit`, which is injected ahead of this block by
+# StudioSession.runCondition. Kept byte-identical to the setup in both key
+# contracts: a task overrides its contracts' setup, so if they drift a contract
+# means one thing standalone and another inside the task.
+setup: |
+  kit.scene()
+  kit.ground(sandbox, 100)
+
+  -- A processional bridge leads into a twin reliquary. The chests sit one stud
+  -- above the nave in matching side chapels, with a lit central relic making
+  -- the split legible from the spawn.
+  kit.platform(sandbox, 0, 0, -18, 10, 12, "EntryBridge")
+  kit.platform(sandbox, 0, 0, 0, 30, 24, "VaultFloor")
+  kit.tint(kit.platform(sandbox, -8, 1, 7, 10, 8, "AlcoveA"), "clay")
+  kit.tint(kit.platform(sandbox, 8, 1, 7, 10, 8, "AlcoveB"), "clay")
+  kit.platform(sandbox, 0, 1, 5.5, 4, 5, "CentralDais")
+  kit.spawn(sandbox, 0, 0, -19, "Spawn")
+
+  -- The outer shell is broken at the entrance, then each raised chapel gets
+  -- its own three-sided silhouette. All wall bases touch their floor surfaces.
+  kit.wall(sandbox, -15.5, 0, 0, 24, "z", "OuterWallWest")
+  kit.wall(sandbox, 15.5, 0, 0, 24, "z", "OuterWallEast")
+  kit.wall(sandbox, 0, 0, 12.5, 30, "x", "OuterWallNorth")
+  kit.wall(sandbox, -10, 0, -12.5, 10, "x", "EntryWallWest")
+  kit.wall(sandbox, 10, 0, -12.5, 10, "x", "EntryWallEast")
+
+  kit.wall(sandbox, -8, 1, 11.5, 10, "x", "AlcoveABack")
+  kit.wall(sandbox, -13.5, 1, 7, 8, "z", "AlcoveAOuter")
+  kit.wall(sandbox, -2.5, 1, 7, 8, "z", "AlcoveAInner")
+  kit.wall(sandbox, 8, 1, 11.5, 10, "x", "AlcoveBBack")
+  kit.wall(sandbox, 2.5, 1, 7, 8, "z", "AlcoveBInner")
+  kit.wall(sandbox, 13.5, 1, 7, 8, "z", "AlcoveBOuter")
+
+  -- Warm entry lanterns pull the player inward. Four pillars create a second,
+  -- lower frame around the chests instead of leaving them loose against walls.
+  local lanternWest = kit.tint(kit.decor(sandbox, -4, 0, -9.5, "pillar", "VaultLanternWest"), "cream")
+  kit.light(lanternWest, "gold", 1.6, 14)
+  local lanternEast = kit.tint(kit.decor(sandbox, 4, 0, -9.5, "pillar", "VaultLanternEast"), "cream")
+  kit.light(lanternEast, "gold", 1.6, 14)
+  kit.decor(sandbox, -11, 1, 4.5, "pillar", "AlcoveAPillarOuter")
+  kit.decor(sandbox, -5, 1, 4.5, "pillar", "AlcoveAPillarInner")
+  kit.decor(sandbox, 5, 1, 4.5, "pillar", "AlcoveBPillarInner")
+  kit.decor(sandbox, 11, 1, 4.5, "pillar", "AlcoveBPillarOuter")
+
+  kit.decor(sandbox, -11, 1, 9.5, "crystal", "AlcoveACrystal")
+  kit.decor(sandbox, 11, 1, 9.5, "crystal", "AlcoveBCrystal")
+  kit.decor(sandbox, 0, 1, 5.5, "crystal", "CentralRelic")
+
+  -- The vault sits in an overgrown excavation. Repeated clusters at the shell
+  -- edges establish depth without putting collision into the playable aisle.
+  kit.decor(sandbox, -22, 0, -18, "bush", "BushWestA")
+  kit.decor(sandbox, -18.5, 0, -20.5, "bush", "BushWestB")
+  kit.decor(sandbox, -22, 0, -14, "bush", "BushWestC")
+  kit.decor(sandbox, 22, 0, -18, "bush", "BushEastA")
+  kit.decor(sandbox, 18.5, 0, -20.5, "bush", "BushEastB")
+  kit.decor(sandbox, 22, 0, -14, "bush", "BushEastC")
+  kit.decor(sandbox, -21, 0, 13, "crystal", "ExcavationCrystalWest")
+  kit.decor(sandbox, 21, 0, 13, "crystal", "ExcavationCrystalEast")
+
+  local use = Instance.new("BindableEvent")
+  use.Name = "Use"
+  use.Parent = sandbox
+
+  -- A real but irrelevant signal, so "ignores the wrong key" is distinguishable
+  -- from "ignores everything". Built here rather than in a control, so no
+  -- control differs structurally from the treatment.
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
+  -- Matching chests keep the test honest; their architecture gives each one a
+  -- clear address without encoding the key match into the prop itself.
+  local chestA = kit.chest(sandbox, -8, 1, 7, "ChestA")
+  chestA:SetAttribute("Locked", true)
+  chestA:SetAttribute("KeyId", "KeyA")
+
+  local chestB = kit.chest(sandbox, 8, 1, 7, "ChestB")
+  chestB:SetAttribute("Locked", true)
+  chestB:SetAttribute("KeyId", "KeyB")
+
+# The bug, stated as code rather than as prose.
+#
+# It is deliberately the plausible kind: someone wrote the mechanic, tested it
+# with one chest, and shipped. It passes any test that only ever looks at the
+# chest you meant to open, which is why the contract insists on a second chest
+# and a control that uses the wrong key.
+baseline: |
+  sandbox.Use.Event:Connect(function()
+    for _, child in ipairs(sandbox:GetChildren()) do
+      if child:GetAttribute("Locked") ~= nil then
+        child:SetAttribute("Locked", false)
+      end
+    end
+  end)
+
+contracts:
+  - ../contracts/key_a_opens_chest_a.yaml
+  - ../contracts/key_b_opens_chest_b.yaml
+
+# Nothing is satisfied yet -- that is what makes this a repair rather than an
+# extension.
+already_satisfied: []

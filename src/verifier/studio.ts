@@ -1,3 +1,4 @@
+import { KIT_LUAU } from './kit.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
@@ -159,6 +160,19 @@ if existing then existing:Destroy() end
 local sandbox = Instance.new("Folder")
 sandbox.Name = ${JSON.stringify(SANDBOX)}
 sandbox.Parent = workspace
+
+-- The kit, in scope for the setup.
+--
+-- Contract setups build their world through kit constructors, so a rebuild
+-- without this fails on every condition -- and the verifier would report a
+-- world that cannot be constructed rather than a missing dependency. It goes
+-- before the setup and after the sandbox folder exists, because the
+-- constructors take that folder as their parent.
+--
+-- It costs nothing causally: the same prelude runs in the treatment and in
+-- every control, so it cancels in the difference. That is the property that
+-- makes it safe to put anything here at all.
+${KIT_LUAU}
 
 do
 ${setup}

@@ -5,29 +5,75 @@ goal: >-
   without breaking the coin mechanic.
 
 # The world every contract in this task shares.
+#
+# The coin world from build_coin, plus the door the new mechanic is about. Built
+# through `kit`, which is injected ahead of this block by
+# StudioSession.runCondition.
 setup: |
-  local coin = Instance.new("Part")
-  coin.Name = "Coin"
-  coin.Anchored = true
-  coin.Parent = sandbox
+  kit.scene()
+  kit.ground(sandbox, 120)
 
-  local board = Instance.new("Part")
-  board.Name = "Scoreboard"
-  board.Anchored = true
+  -- A winding ascent through a half-buried sun court. The route bends west,
+  -- crosses back through the garden, then climbs toward the shrine; every rise
+  -- is 1.5 studs or less and every gap is 4 studs or less.
+  kit.platform(sandbox, 0, 0, -22, 24, 16, "StartPlatform")
+  kit.tint(kit.platform(sandbox, -10, 1.5, -8, 12, 10, "WestLanding"), "clay")
+  kit.platform(sandbox, -5, 2.5, 3, 14, 10, "GardenTurn")
+  kit.tint(kit.platform(sandbox, 4, 3.5, 12, 10, 8, "Bridge"), "clay")
+  kit.platform(sandbox, 0, 4, 23, 18, 12, "Ledge")
+  kit.platform(sandbox, -19, 2.5, 6, 8, 8, "WestLookout")
+  kit.tint(kit.platform(sandbox, 17, 1.5, -3, 10, 10, "EastOutcrop"), "clay")
+  kit.spawn(sandbox, 0, 0, -23, "Spawn")
+
+  -- The spawn is a real threshold: score stones behind you, lanterns ahead,
+  -- and broken perimeter walls that reveal the route in layers.
+  local board = kit.tint(kit.wall(sandbox, -6.5, 0, -29.5, 7, "x", "Scoreboard"), "cream")
   board:SetAttribute("Coins", 0)
-  board.Parent = sandbox
 
-  local other = Instance.new("Part")
-  other.Name = "OtherScoreboard"
-  other.Anchored = true
+  local other = kit.tint(kit.wall(sandbox, 6.5, 0, -29.5, 7, "x", "OtherScoreboard"), "slate")
   other:SetAttribute("Coins", 0)
-  other.Parent = sandbox
 
-  local door = Instance.new("Part")
-  door.Name = "Door"
-  door.Anchored = true
+  kit.wall(sandbox, -12.5, 0, -22, 16, "z", "StartWallWest")
+  kit.wall(sandbox, 12.5, 0, -22, 16, "z", "StartWallEast")
+  kit.wall(sandbox, -25, 0, -5, 30, "z", "RuinWallWest")
+  kit.wall(sandbox, 25, 0, 5, 34, "z", "RuinWallEast")
+  kit.wall(sandbox, -16.5, 0, -8, 10, "z", "LandingWall")
+
+  local lanternWest = kit.tint(kit.decor(sandbox, -9, 0, -16.5, "pillar", "EntryLanternWest"), "cream")
+  kit.light(lanternWest, "gold", 1.4, 12)
+  local lanternEast = kit.tint(kit.decor(sandbox, 9, 0, -16.5, "pillar", "EntryLanternEast"), "cream")
+  kit.light(lanternEast, "gold", 1.4, 12)
+
+  -- Plants occur in colonies, not as isolated props. The denser clusters sit
+  -- outside the route, while crystals mark its turns like blue trail lights.
+  kit.decor(sandbox, -20, 0, -26, "bush", "BushWestA")
+  kit.decor(sandbox, -16.5, 0, -27, "bush", "BushWestB")
+  kit.decor(sandbox, -22, 0, -22.5, "bush", "BushWestC")
+  kit.decor(sandbox, 19, 0, -16, "bush", "BushEastA")
+  kit.decor(sandbox, 22.5, 0, -13.5, "bush", "BushEastB")
+  kit.decor(sandbox, 18.5, 0, -11.5, "bush", "BushEastC")
+  kit.decor(sandbox, -13.5, 1.5, -10.5, "crystal", "TrailCrystalWest")
+  kit.decor(sandbox, 0, 2.5, 4, "crystal", "TrailCrystalTurn")
+
+  -- The side walls narrow the final terrace and the paired pillars frame the
+  -- gold pickup against the sky. It remains at standing height: walk into it.
+  kit.wall(sandbox, -9.5, 4, 23, 12, "z", "ShrineWallWest")
+  kit.wall(sandbox, 9.5, 4, 23, 12, "z", "ShrineWallEast")
+  kit.decor(sandbox, -5, 4, 27.5, "pillar", "ShrinePillarWest")
+  kit.decor(sandbox, 5, 4, 27.5, "pillar", "ShrinePillarEast")
+  kit.decor(sandbox, -6.5, 4, 20, "crystal", "ShrineCrystalWest")
+  kit.decor(sandbox, 6.5, 4, 20, "crystal", "ShrineCrystalEast")
+  kit.decor(sandbox, -6.5, 4, 25, "bush", "ShrineBushWest")
+  kit.decor(sandbox, 6.5, 4, 25, "bush", "ShrineBushEast")
+
+  kit.coin(sandbox, 0, 4, 24, "Coin")
+
+  -- The extension completes the open shrine with a teal gate and two slate
+  -- wings. The route, pickup, score stones, and event surface stay unchanged.
+  local door = kit.door(sandbox, 0, 4, 29, "x", "Door")
   door:SetAttribute("Open", false)
-  door.Parent = sandbox
+  kit.wall(sandbox, -6, 4, 29, 6, "x", "DoorWallWest")
+  kit.wall(sandbox, 6, 4, 29, 6, "x", "DoorWallEast")
 
   local collect = Instance.new("BindableEvent")
   collect.Name = "Collect"

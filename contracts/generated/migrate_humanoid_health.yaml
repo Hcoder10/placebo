@@ -1,0 +1,107 @@
+# GENERATED from a scraped claim that survived engine adjudication.
+#
+# Source:   https://create.roblox.com/docs/reference/engine/deprecations
+#           fetched via fixture at 2026-08-29T23:58:39.105Z
+# Claim:    Humanoid.Health is deprecated in favour of Humanoid.MaxHealth
+# Engine:   Humanoid.Health and Humanoid.MaxHealth both resolve in this engine
+#           replacement-first assignment keeps the two members distinct
+#
+# The web supplied the claim. Everything asserted below about the engine was
+# measured in it (src/bright/tasks.ts, probeSeparability), and the verdict on
+# any implementation is the verifier's, not this file's.
+#
+# Regenerate with:  npx tsx src/train/curriculum_train.ts
+id: migrate_humanoid_health
+requirement: >-
+  When the refill signal fires, every readout must show the value its subject
+  carries on the member that Humanoid.Health was superseded by, rather than the one it
+  carries on Humanoid.Health itself: ReadoutA rises by exactly 75, ReadoutB rises by exactly 50. Firing the signal
+  again changes nothing further. A run with no signal changes nothing, an
+  unrelated signal changes nothing, and the spare readout never moves.
+
+setup: |
+  kit.scene()
+  kit.ground(sandbox, 110)
+
+  kit.platform(sandbox, 0, 0, 0, 24, 18, "Deck")
+  kit.spawn(sandbox, 0, 0, -10, "Spawn")
+  kit.decor(sandbox, -16, 0, 6, "crystal", "Crystal")
+  kit.decor(sandbox, 16, 0, 6, "bush", "Bush")
+
+  -- The subjects, seeded in the order the engine was measured to accept:
+  -- Humanoid.MaxHealth first, then Humanoid.Health. probeSeparability
+  -- found this is the order under which both members keep distinct values; the
+  -- other one collapses them onto the same number.
+  --
+  -- Each readout starts at the value the DEPRECATED member holds, which is what
+  -- makes the required change a delta nothing in the prompt gives away: the model
+  -- never sees this block, so it cannot learn the absolute a readout has to reach.
+  local subjectA = Instance.new("Humanoid")
+  subjectA.Name = "SubjectA"
+  subjectA.Parent = sandbox
+  subjectA.MaxHealth = 100
+  subjectA.Health = 25
+
+  local readoutA = kit.tint(kit.wall(sandbox, -9, 0, -14, 6, "x", "ReadoutA"), "cream")
+  readoutA:SetAttribute("Value", 25)
+
+  local subjectB = Instance.new("Humanoid")
+  subjectB.Name = "SubjectB"
+  subjectB.Parent = sandbox
+  subjectB.MaxHealth = 90
+  subjectB.Health = 40
+
+  local readoutB = kit.tint(kit.wall(sandbox, 9, 0, -14, 6, "x", "ReadoutB"), "slate")
+  readoutB:SetAttribute("Value", 40)
+
+  local spare = kit.tint(kit.wall(sandbox, 0, 0, 16, 6, "z", "SpareReadout"), "slate")
+  spare:SetAttribute("Value", 0)
+
+  -- Studio's edit mode runs no physics, so the mechanic is driven by an explicit
+  -- server-authoritative event rather than a physical Touched. The causal
+  -- structure is identical: something fires, and the world is supposed to move
+  -- because of it.
+  local refill = Instance.new("BindableEvent")
+  refill.Name = "Refill"
+  refill.Parent = sandbox
+
+  -- Built here rather than inside the control, so the control differs from the
+  -- treatment in the interaction alone and not in the world's structure.
+  local decoy = Instance.new("BindableEvent")
+  decoy.Name = "Decoy"
+  decoy.Parent = sandbox
+
+# Fire once per realization. The required effects are idempotent writes, so a
+# correct implementation moves each readout by the same delta however many times
+# the signal arrives — while an implementation that hardcodes the delta as an
+# increment overshoots on the second firing and is rejected.
+treatment: |
+  for _ = 1, REALIZATION do
+    sandbox.Refill:Fire()
+  end
+
+controls:
+  - name: no_refill
+    steps: |
+      -- deliberately empty: same world, same elapsed setup, no interaction
+
+  # A real but irrelevant signal, so "did nothing" is distinguishable from
+  # "responds to anything at all".
+  - name: unrelated_signal
+    steps: |
+      for _ = 1, REALIZATION do
+        sandbox.Decoy:Fire()
+      end
+
+effects:
+  - key: "ReadoutA.@Value"
+    change: "+75"
+  - key: "ReadoutB.@Value"
+    change: "+50"
+
+non_effects:
+  - "SpareReadout.@Value"
+
+# Repetitions of the interaction, not variations of the world. A handler that
+# sets the readout is idempotent under all three; one that increments is not.
+realizations: [1, 2, 3]

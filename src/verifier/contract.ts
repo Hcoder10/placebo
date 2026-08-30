@@ -15,7 +15,22 @@ const ExpectedEffectSchema = z
   .object({
     key: z.string().min(1),
     /** `+1` / `-2` for a numeric move, or `true->false` for a transition. */
-    change: z.string().regex(/^([+-]\d+(\.\d+)?|\w+\s*->\s*\w+)$/, 'expected "+1" or "true->false"'),
+    change: z
+      .string()
+      // Widened from `\w+` on both sides of the arrow, and the sign allowed to
+      // be separated from its digits. A model authoring these writes
+      // `"locked"->"unlocked"`, `100->90` and `+ 1` — all of which mean exactly
+      // what they look like, and all of which the original pattern rejected
+      // with `effects.0.change: expected "+1" or "true->false"`.
+      //
+      // What stays rejected is the genuinely ambiguous case: a bare unsigned
+      // number, which could equally mean "increases by one" or "ends up as
+      // one". Guessing between those would silently score the wrong thing,
+      // which is worse than refusing the contract.
+      .regex(
+        /^([+-]\s*\d+(?:\.\d+)?|["']?[\w.-]+["']?\s*->\s*["']?[\w.-]+["']?)$/,
+        'change must be a signed delta like "+1" or "-10", or a transition like "true->false"',
+      ),
   })
   .strict();
 
@@ -80,21 +95,22 @@ export function loadContract(path: string): Contract {
   return parsed.data;
 }
 
-const DELTA = /^([+-]\d+(?:\.\d+)?)$/;
-const TRANSITION = /^(\w+)\s*->\s*(\w+)$/;
+const DELTA = /^([+-]\s*\d+(?:\.\d+)?)$/;
+const TRANSITION = /^["']?([\w.-]+)["']?\s*->\s*["']?([\w.-]+)["']?$/;
 
 /** Normalises a state value into the vocabulary contracts are written in. */
 function token(value: unknown): string {
   if (value === null || value === undefined) return 'false';
   if (value === true) return 'true';
   if (value === false) return 'false';
-  return String(value).toLowerCase();
+  // Quotes are stripped so `"locked"` and `locked` are the same token.
+  return String(value).replace(/^["']|["']$/g, '').toLowerCase();
 }
 
 export function effectMatches(effect: ExpectedEffect, before: unknown, after: unknown): boolean {
   const delta = DELTA.exec(effect.change);
   if (delta?.[1]) {
-    const want = Number.parseFloat(delta[1]);
+    const want = Number.parseFloat(delta[1].replace(/\s+/g, ''));
     const from = Number(before ?? 0);
     const to = Number(after ?? 0);
     if (Number.isNaN(from) || Number.isNaN(to)) return false;

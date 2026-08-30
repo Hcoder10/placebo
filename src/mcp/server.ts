@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -8,6 +9,8 @@ import { loadContract } from '../verifier/contract.js';
 import { auditContract } from '../verifier/validate.js';
 import { evaluate } from '../verifier/effect.js';
 import { StudioSession } from '../verifier/studio.js';
+import { inspectDesign } from '../verifier/design.js';
+import { KIT_LIGHTING_RESTORE_LUAU } from '../verifier/kit.js';
 import { Authoring } from './authoring.js';
 import { Run, scorePrediction } from './runstate.js';
 
@@ -198,8 +201,20 @@ function buildServer(): McpServer {
     'world_build',
     {
       title: 'Create objects in the game world',
+      // Deliberately short.
+      //
+      // KIT_BRIEF lives in the agent instructions, not here. Putting it in the
+      // tool schema was measurably worse: it enlarges the tool block sent on
+      // every turn, and with the bigger block this model started emitting its
+      // tool calls on the `commentary json` Harmony channel, which vLLM's
+      // STREAMING parser assembles into a function name of
+      // `call_toolcommentaryjson`. Every call then missed the tool mapping and
+      // the run stalled after five world steps. The same request parses
+      // perfectly non-streamed, so the bug is in streaming delta assembly --
+      // but the cheap and correct fix is to describe the tool here and teach
+      // the kit in the system prompt, which is where guidance belongs anyway.
       description:
-        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` is in scope. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
+        'Runs Luau that creates or configures instances under the sandbox root. `sandbox` and `kit` are in scope. Each call is remembered so the contracts you write afterwards can rebuild this world from nothing.',
       inputSchema: {
         luau: z.string().describe('Luau that builds part of the world. `sandbox` is in scope.'),
       },
@@ -259,6 +274,49 @@ function buildServer(): McpServer {
       };
 
       return text(await authoring.propose({ session: await session(), draft, reference }));
+    },
+  );
+
+  server.registerTool(
+    'design_check',
+    {
+      title: 'Inspect how the world looks',
+      description:
+        'Measures the appearance of what you have built: palette adherence, overlapping geometry, grid alignment, proportion, variety, and whether anything is still an unstyled default part. Read-only. Findings name the instance and what was observed, so fix them with world_build and check again.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async () => {
+      const report = await inspectDesign(await session(), authoring.root);
+
+      // Deliberately terse, and the reason is measured rather than stylistic.
+      //
+      // The full report -- every check, its note, and every finding -- ran to
+      // thousands of tokens on a 32-part scene, and the run it was feeding died
+      // with `Input length (18441) exceeds model's maximum context length
+      // (16384)`. A tool whose output cannot fit in the window it is being read
+      // in has not given the agent information, it has ended the episode.
+      //
+      // So: passing checks collapse to their names, only failures carry detail,
+      // and each finding becomes one line built from the `fix` -- the single
+      // field the agent can act on. Everything dropped is still available in
+      // full through the console.
+      const failing = report.checks.filter(check => !check.pass);
+      const FINDINGS_SHOWN = 3;
+
+      return text({
+        passed: report.passed,
+        parts: report.parts,
+        from_kit: report.kitParts,
+        hand_rolled: report.handRolled,
+        passing: report.checks.filter(check => check.pass).map(check => check.name),
+        failing: failing.map(check => ({
+          check: check.name,
+          note: check.note,
+          fix: check.findings.slice(0, FINDINGS_SHOWN).map(f => `${f.instance}: ${f.observed} -> ${f.fix}`),
+          more: Math.max(0, check.findings.length - FINDINGS_SHOWN) + check.omitted,
+        })),
+      });
     },
   );
 
@@ -359,9 +417,17 @@ app.post('/mcp', (req, res) => {
 
 app.use(express.json({ limit: '4mb' }));
 
-// The operator console: one static page, served from the same process that
-// holds the run state. No build step and no second port to explain during a demo.
-app.get('/', (_req, res) => {
+// The landing story and operator console share one visual shell. Generated
+// background films are intentionally static assets: live API data, copy,
+// controls, and approval gates remain accessible HTML above them.
+app.use('/assets', express.static(join(ROOT, 'console', 'assets'), { maxAge: '1y', immutable: true }));
+app.get('/styles.css', (_req, res) => {
+  res.sendFile(join(ROOT, 'console', 'styles.css'));
+});
+app.get('/app.js', (_req, res) => {
+  res.sendFile(join(ROOT, 'console', 'app.js'));
+});
+app.get(['/', '/console'], (_req, res) => {
   res.sendFile(join(ROOT, 'console', 'index.html'));
 });
 
@@ -400,13 +466,86 @@ app.get('/health', (_req, res) => {
  * the same view and a watcher cannot tell which is which — the console showed
  * ten branches from three different runs at one point.
  */
-app.post('/api/reset', (_req, res) => {
+// What the training loop has actually produced, read from disk each time so the
+// console shows the pipeline's real scale rather than a number baked in at
+// build. Everything here is a count of something the engine adjudicated.
+app.get('/api/training', (_req, res) => {
+  const dataDir = join(ROOT, 'data');
+  const countLines = (name: string): number => {
+    try {
+      return readFileSync(join(dataDir, name), 'utf8').split('\n').filter(Boolean).length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const corpus = countLines('corpus.jsonl');
+  let turns = 0;
+  let accepted = 0;
+  try {
+    for (const line of readFileSync(join(dataDir, 'corpus.jsonl'), 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      const row = JSON.parse(line) as { turn?: number; accepted?: boolean };
+      turns = Math.max(turns, row.turn ?? 0);
+      if (row.accepted) accepted += 1;
+    }
+  } catch {
+    // no corpus yet
+  }
+
+  res.json({
+    turns,
+    corpus,
+    accepted,
+    rejected: corpus - accepted,
+    preference_pairs: countLines('dpo.jsonl'),
+    supervised: countLines('sft.jsonl'),
+    curriculum_claims: countLines('curriculum.jsonl'),
+    draft_traces: countLines('draft-traces.jsonl'),
+  });
+});
+
+// The scraped-curriculum arm, read from the measurement the pipeline wrote.
+// Reported with its control, because the lift is only worth quoting next to it:
+// a note of identical shape naming a replacement the engine says does not exist
+// collapses acceptance to 5%, which is what rules out "the prompt got longer".
+app.get('/api/curriculum', (_req, res) => {
+  try {
+    const raw = readFileSync(join(ROOT, 'data', 'curriculum-measurement.json'), 'utf8');
+    res.json(JSON.parse(raw) as unknown);
+  } catch {
+    res.json({ available: false });
+  }
+});
+
+app.post('/api/reset', async (_req, res) => {
   for (const key of Object.keys(run.state.branches)) {
     delete run.state.branches[key];
   }
   for (const key of Object.keys(run.state.pending)) {
     delete run.state.pending[key];
   }
+
+  // Reset the world too, not just the dashboard.
+  //
+  // `kit.scene()` is the kit's one effect outside the sandbox root: it restyles
+  // the place's Lighting, and stashes the previous values on Lighting itself so
+  // they outlive the folder being destroyed. Dropping the folder without
+  // calling the restore would leave every later run -- and the user's own
+  // place -- on the kit's sky, which is a side effect nobody asked for and
+  // nobody would think to look for.
+  //
+  // It cannot affect a verdict either way: the lighting change is idempotent
+  // and identical across treatment and control. This is about not leaving
+  // someone's Studio altered.
+  try {
+    const active = await session();
+    await authoring.reset(active);
+    await active.luau(KIT_LIGHTING_RESTORE_LUAU);
+  } catch {
+    // A reset that cannot reach Studio still clears the dashboard.
+  }
+
   run.setStatus('idle', 'Idle');
   res.json({ ok: true });
 });
@@ -446,6 +585,14 @@ app.get('/api/state', (_req, res) => {
 });
 
 const port = Number.parseInt(process.env.PLACEBO_MCP_PORT ?? '9400', 10);
-app.listen(port, '0.0.0.0', () => {
+const httpServer = app.listen(port, '0.0.0.0', () => {
   process.stdout.write(`placebo-tools on http://0.0.0.0:${String(port)}/mcp (contract ${contract.id})\n`);
 });
+
+// Keep an explicit reference to the listener. Besides making shutdown and
+// startup failures observable, this prevents launchers from treating the
+// completed module evaluation as a finished one-shot script.
+httpServer.on('error', (error: NodeJS.ErrnoException) => {
+  process.stderr.write(`placebo-tools failed to listen on ${String(port)}: ${error.message}\n`);
+});
+httpServer.ref();

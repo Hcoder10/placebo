@@ -1,230 +1,287 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-view="landing">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Placebo — causal repair console</title>
-<style>
-  :root {
-    --bg: #0b0d10;
-    --panel: #12161b;
-    --panel-2: #171c23;
-    --line: #232a33;
-    --text: #e6ebf2;
-    --muted: #8b97a8;
-    --accept: #3ddc91;
-    --reject: #ff6b6b;
-    --warn: #ffb454;
-    --accent: #6aa9ff;
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
-  header {
-    padding: 18px 24px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
-    position: sticky; top: 0; background: var(--bg); z-index: 5;
-  }
-  h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
-  h1 span { color: var(--muted); font-weight: 400; }
-  .status {
-    font: 600 11px/1 var(--mono); letter-spacing: .8px; text-transform: uppercase;
-    padding: 5px 9px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted);
-  }
-  .status.running { color: var(--accent); border-color: #2b4a7a; }
-  .status.waiting { color: var(--warn); border-color: #5a4526; }
-  .status.done    { color: var(--accept); border-color: #22553f; }
-  .req { color: var(--muted); font-size: 13px; max-width: 78ch; }
-  main { padding: 20px 24px 60px; }
-  .meta { display: flex; gap: 20px; color: var(--muted); font: 12px/1 var(--mono); margin-bottom: 18px; flex-wrap: wrap; }
-  .meta b { color: var(--text); font-weight: 600; }
-
-  .approval {
-    background: #24190a; border: 1px solid #6b4c17; border-radius: 8px;
-    padding: 14px 16px; margin-bottom: 20px;
-  }
-  .approval h2 { margin: 0 0 6px; font-size: 14px; color: var(--warn); }
-  .approval button {
-    font: 600 12px var(--mono); padding: 7px 14px; border-radius: 5px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--panel-2); color: var(--text); margin-right: 8px;
-  }
-  .approval button.deny { border-color: #6b2b2b; color: var(--reject); }
-
-  h2.section { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 26px 0 10px; font-weight: 600; }
-
-  .branches { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-  .branch {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px;
-    cursor: pointer; transition: border-color .12s;
-  }
-  .branch:hover { border-color: #33404f; }
-  .branch.sel { border-color: var(--accent); }
-  .branch.accept { border-left: 3px solid var(--accept); }
-  .branch.reject { border-left: 3px solid var(--reject); }
-  .branch.pending { border-left: 3px solid var(--line); }
-  .branch h3 { margin: 0 0 8px; font: 600 13px var(--mono); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .verdict { font: 700 10px var(--mono); letter-spacing: .8px; padding: 3px 7px; border-radius: 3px; }
-  .verdict.accept { background: #10361f; color: var(--accept); }
-  .verdict.reject { background: #3a1a1a; color: var(--reject); }
-  .verdict.pending { background: var(--panel-2); color: var(--muted); }
-  .why { color: var(--muted); font-size: 12px; min-height: 34px; }
-  .chips { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-  .chip { font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; }
-  .chip.bad { color: var(--warn); border-color: #5a4526; }
-  .chip.good { color: var(--accept); border-color: #22553f; }
-
-  .detail { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
-  table { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
-  th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
-  td { padding: 6px 10px 6px 0; border-bottom: 1px solid #1a1f26; vertical-align: top; }
-  td.k { color: var(--muted); }
-  .ok { color: var(--accept); }
-  .no { color: var(--reject); }
-  pre { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-x: auto; font: 12px/1.5 var(--mono); color: #c6d0dc; margin: 8px 0 0; }
-  .empty { color: var(--muted); font-style: italic; padding: 30px 0; text-align: center; }
-  .inert { color: var(--warn); font: 12px var(--mono); }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f1ecdf">
+  <meta name="description" content="Placebo proves that a patch caused the fix—and nothing else moved.">
+  <title>Placebo — causal feature engineering</title>
+  <link rel="preload" href="/assets/overlays/placebo-wordmark.png" as="image">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
 </head>
 <body>
-<header>
-  <h1>Placebo <span>— causal repair console</span></h1>
-  <span id="status" class="status">idle</span>
-  <span id="headline" class="req"></span>
-</header>
+  <a id="skipLink" class="skip-link" href="#story">Skip to story</a>
 
-<main>
-  <div class="req" id="requirement"></div>
-  <div class="meta" id="meta"></div>
+  <header class="site-nav" aria-label="Primary navigation">
+    <a class="brand" href="#surface" aria-label="Placebo home">
+      <img src="/assets/overlays/placebo-wordmark.png" alt="Placebo — causal feature engineering" width="380" height="134">
+    </a>
+    <nav class="site-nav__links" aria-label="Landing navigation">
+      <a href="#experiment">How it works</a>
+      <a href="#integrity">Integrity</a>
+      <button class="text-button" type="button" data-open-console>Open console <span aria-hidden="true">↗</span></button>
+    </nav>
+  </header>
 
-  <div id="approval"></div>
+  <aside class="depth-rail" aria-label="Journey through Placebo">
+    <span class="depth-rail__label">surface</span>
+    <ol>
+      <li><a href="#surface" aria-label="Surface" data-depth="surface"></a></li>
+      <li><a href="#branches" aria-label="Branches" data-depth="branches"></a></li>
+      <li><a href="#experiment" aria-label="Experiment" data-depth="experiment"></a></li>
+      <li><a href="#effect" aria-label="Causal effect" data-depth="effect"></a></li>
+      <li><a href="#regression" aria-label="Regression" data-depth="regression"></a></li>
+      <li><a href="#integrity" aria-label="Integrity core" data-depth="integrity"></a></li>
+    </ol>
+    <span class="depth-rail__label">core</span>
+  </aside>
 
-  <h2 class="section">Counterfactual branches</h2>
-  <div class="branches" id="branches"></div>
-
-  <div id="detail"></div>
-</main>
-
-<script>
-const $ = id => document.getElementById(id);
-let selected = null;
-
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
-
-function whyText(b) {
-  const v = b.verdict;
-  if (!v) return b.patchLuau ? 'patch proposed, awaiting verification' : 'waiting for a patch';
-  if (v.error) return 'error: ' + v.error.slice(0, 70);
-  if (v.inert) return 'no causal effect — state identical with and without the interaction';
-  const bits = [];
-  if (v.missing?.length) bits.push('missing ' + v.missing.join(', '));
-  if (v.collateral?.length) bits.push('moved ' + v.collateral.join(', '));
-  if (!bits.length) return 'caused every required effect, nothing else moved';
-  return bits.join('; ');
-}
-
-function render(s) {
-  $('status').textContent = s.status;
-  $('status').className = 'status ' + s.status;
-  $('headline').textContent = s.headline || '';
-  $('requirement').textContent = s.contract?.requirement || '';
-
-  $('meta').innerHTML = [
-    ['contract', s.contract?.id],
-    ['realizations', (s.contract?.realizations || []).join(', ')],
-    ['controls', (s.contract?.controls || []).join(', ')],
-    ['branches', Object.keys(s.branches || {}).length],
-  ].map(([k, v]) => `${k} <b>${esc(v ?? '-')}</b>`).join('');
-
-  // Approval gate — the irreversible step asks first.
-  const pending = Object.entries(s.pending || {});
-  $('approval').innerHTML = pending.length === 0 ? '' : pending.map(([id, p]) => `
-    <div class="approval">
-      <h2>Approval required — ${esc(p.tool)}</h2>
-      <div class="req">This step cannot be undone. Arguments: <code>${esc(JSON.stringify(p.args))}</code></div>
-      <div style="margin-top:10px">
-        <button onclick="decide('${esc(id)}','allow')">Approve</button>
-        <button class="deny" onclick="decide('${esc(id)}','deny')">Deny</button>
+  <main id="story" class="landing-view">
+    <section class="story-zone story-zone--hero" id="surface" data-zone="surface">
+      <div class="story-sticky">
+        <video class="story-video" muted playsinline preload="metadata" poster="/assets/stills/zone-surface.png" aria-hidden="true">
+          <source src="/assets/videos/zone-surface.mp4" type="video/mp4">
+        </video>
+        <div class="story-veil story-veil--left"></div>
+        <article class="story-copy story-copy--left story-copy--hero">
+          <p class="eyebrow">Causal feature engineering</p>
+          <h1>Prove the fix<br>caused the fix.</h1>
+          <p class="lede">Placebo runs every patch against the world twice—treatment and matched control—then keeps only what survives the difference.</p>
+          <div class="button-row">
+            <a class="button button--ink" href="#experiment">Descend into the experiment <span aria-hidden="true">↓</span></a>
+            <button class="button button--paper" type="button" data-open-console>Open live console</button>
+          </div>
+          <p class="field-note">One checkpoint. Independent patches. Engine evidence.</p>
+        </article>
+        <a class="scroll-cue" href="#branches"><span>follow the roots</span><i aria-hidden="true"></i></a>
       </div>
-    </div>`).join('');
+    </section>
 
-  const branches = Object.values(s.branches || {});
-  $('branches').innerHTML = branches.length === 0
-    ? '<div class="empty">No branches yet. The parent agent fans out subagents from one identical checkpoint.</div>'
-    : branches.map(b => {
-        const v = b.verdict;
-        const cls = !v ? 'pending' : v.accepted ? 'accept' : 'reject';
-        const label = !v ? 'PENDING' : v.accepted ? 'ACCEPT' : 'REJECT';
-        const pred = (s.predictions || {})[b.id];
-        return `
-          <div class="branch ${cls} ${selected === b.id ? 'sel' : ''}" onclick="select('${esc(b.id)}')">
-            <h3>${esc(b.id)}<span class="verdict ${cls}">${label}</span></h3>
-            <div class="why">${esc(whyText(b))}</div>
-            <div class="chips">
-              ${v ? `<span class="chip ${v.stable ? 'good' : 'bad'}">${v.stable ? 'stable' : 'timing-dependent'}</span>` : ''}
-              ${v ? `<span class="chip">${v.realizations} realizations</span>` : ''}
-              <span class="chip">${b.engineRuns} engine runs</span>
-              ${pred?.scored ? `<span class="chip ${pred.correct === pred.total ? 'good' : 'bad'}">prediction ${pred.correct}/${pred.total}</span>` : ''}
+    <section class="story-zone" id="branches" data-zone="branches">
+      <div class="story-sticky">
+        <video class="story-video" muted playsinline preload="metadata" poster="/assets/stills/zone-branches.png" aria-hidden="true">
+          <source src="/assets/videos/zone-branches.mp4" type="video/mp4">
+        </video>
+        <div class="story-veil story-veil--right"></div>
+        <article class="story-copy story-copy--right">
+          <p class="eyebrow">01 · Independent search</p>
+          <h2>One checkpoint.<br>Many honest branches.</h2>
+          <p>Every candidate starts from identical state. No branch sees another branch’s answer, so convergence means something.</p>
+          <ul class="field-list">
+            <li><span>shared</span> world checkpoint</li>
+            <li><span>sealed</span> predictions before observation</li>
+            <li><span>scored</span> patches on their own claims</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="story-zone" id="experiment" data-zone="experiment">
+      <div class="story-sticky">
+        <video class="story-video" muted playsinline preload="metadata" poster="/assets/stills/zone-treatment-control.png" aria-hidden="true">
+          <source src="/assets/videos/zone-treatment-control.mp4" type="video/mp4">
+        </video>
+        <div class="story-veil story-veil--center"></div>
+        <article class="story-copy story-copy--center story-copy--high">
+          <p class="eyebrow">02 · Counterfactual worlds</p>
+          <h2>Run the world twice.</h2>
+          <p>Treatment receives the interaction. Control receives everything except it. Timing, seeds, and starting state stay matched.</p>
+          <div class="world-key" aria-label="Treatment and control legend">
+            <span><i class="swatch swatch--clay"></i>Treatment</span>
+            <span><i class="swatch swatch--blue"></i>Control</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="story-zone" id="effect" data-zone="effect">
+      <div class="story-sticky">
+        <video class="story-video" muted playsinline preload="metadata" poster="/assets/stills/zone-causal-effect.png" aria-hidden="true">
+          <source src="/assets/videos/zone-causal-effect.mp4" type="video/mp4">
+        </video>
+        <div class="story-veil story-veil--center"></div>
+        <article class="story-copy story-copy--center story-copy--high">
+          <p class="eyebrow">03 · Difference, not impression</p>
+          <h2>Keep only the difference.</h2>
+          <p class="equation" aria-label="Treatment state minus control state equals causal effect">
+            <span>state<sub>treatment</sub></span><b>−</b><span>state<sub>control</sub></span><b>=</b><em>causal effect</em>
+          </p>
+          <p>Shared motion cancels. Collateral changes remain visible. An inert patch has nowhere to hide.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="story-zone" id="regression" data-zone="regression">
+      <div class="story-sticky">
+        <video class="story-video" muted playsinline preload="metadata" poster="/assets/stills/zone-regression.png" aria-hidden="true">
+          <source src="/assets/videos/zone-regression.mp4" type="video/mp4">
+        </video>
+        <div class="story-veil story-veil--left"></div>
+        <article class="story-copy story-copy--left story-copy--high">
+          <p class="eyebrow">04 · History must remain true</p>
+          <h2>Add the feature.<br>Keep the game.</h2>
+          <p>Placebo checks required effects and declared non-effects across repeated realizations. The new door may open; the old coin still has to work.</p>
+          <blockquote>“A fix is only a fix when the rest of the world stays put.”</blockquote>
+        </article>
+      </div>
+    </section>
+
+    <section class="story-zone story-zone--core" id="integrity" data-zone="integrity">
+      <div class="story-sticky">
+        <video class="story-video" muted playsinline preload="metadata" poster="/assets/stills/zone-integrity-core.png" aria-hidden="true">
+          <source src="/assets/videos/zone-integrity-core.mp4" type="video/mp4">
+        </video>
+        <div class="story-veil story-veil--center"></div>
+        <article class="story-copy story-copy--center story-copy--core">
+          <p class="eyebrow">05 · Integrity is measured</p>
+          <h2>Never assume it.</h2>
+          <p>Branch independence. Treatment/control symmetry. Regression stability. Placebo records the proof behind every accepted patch.</p>
+          <div class="integrity-result" aria-label="Seven of seven integrity checks passed">
+            <strong>7<small>/7</small></strong>
+            <span>integrity checks<br>holding</span>
+          </div>
+          <button class="button button--ink" type="button" data-open-console>Enter the causal console <span aria-hidden="true">↗</span></button>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <section id="dashboardView" class="dashboard-view" hidden aria-label="Placebo causal operator console">
+    <video class="dashboard-ambient" muted playsinline loop preload="metadata" poster="/assets/stills/dashboard-ambient.png" aria-hidden="true">
+      <source src="/assets/videos/dashboard-ambient.mp4" type="video/mp4">
+    </video>
+
+    <header class="dash-topbar">
+      <a class="dash-brand" href="/" data-back-landing aria-label="Return to Placebo landing page">
+        <img src="/assets/overlays/placebo-wordmark.png" alt="Placebo" width="250" height="88">
+      </a>
+      <div class="dash-contract">
+        <span>active contract</span>
+        <strong id="dashContract">—</strong>
+      </div>
+      <div class="dash-status-wrap">
+        <span id="dashStatus" class="dash-status">idle</span>
+        <span id="dashHeadline">Waiting for a run</span>
+      </div>
+      <div class="dash-actions">
+        <button class="text-button dash-reset" type="button" data-reset-run>Reset run</button>
+        <button class="text-button dash-back" type="button" data-back-landing><span aria-hidden="true">←</span> Return to the field</button>
+      </div>
+    </header>
+
+    <div class="dash-shell">
+      <aside class="dash-sidebar">
+        <img class="branch-rail-art" src="/assets/overlays/branch-rail.png" alt="" aria-hidden="true">
+        <nav aria-label="Console sections">
+          <a class="is-active" href="#dashExperiment"><span>01</span>Experiment</a>
+          <a id="contractNav" href="#dashContracts" hidden><span>02</span>Contracts</a>
+          <a href="#dashBranches"><span>03</span>Branches</a>
+          <a href="#dashIntegrity"><span>04</span>Integrity</a>
+          <a href="#dashTimeline"><span>05</span>Timeline</a>
+        </nav>
+        <div class="dash-sidebar__foot">
+          <span id="runId">run —</span>
+          <span id="lastSync">not synced</span>
+        </div>
+      </aside>
+
+      <main id="dashboardMain" class="dash-main" tabindex="-1">
+        <section class="dash-intro" id="dashExperiment">
+          <p class="eyebrow">Live causal instrument</p>
+          <h1>What changed<br>because of the patch?</h1>
+          <p id="dashRequirement">The behavioral contract will appear here when a run begins.</p>
+        </section>
+
+        <div id="noticeArea" class="notice-area" aria-live="polite"></div>
+        <div id="approvalArea" class="approval-area" aria-live="polite"></div>
+
+        <section id="dashContracts" class="contract-board paper-panel" hidden aria-labelledby="contractsTitle">
+          <div class="panel-heading panel-heading--compact">
+            <div>
+              <p class="eyebrow">Authored behavior</p>
+              <h2 id="contractsTitle">Contract gate</h2>
             </div>
-          </div>`;
-      }).join('');
+            <span id="worldStepCount" class="drafting-chip">0 world steps</span>
+          </div>
+          <div id="contractList" class="contract-list"></div>
+        </section>
 
-  const b = branches.find(x => x.id === selected);
-  $('detail').innerHTML = !b ? '' : detailHtml(b, (s.predictions || {})[b.id]);
-}
+        <section class="experiment-board paper-panel" aria-labelledby="experimentTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Matched execution</p>
+              <h2 id="experimentTitle">Treatment − Control</h2>
+            </div>
+            <span id="realizationCount" class="drafting-chip">— realizations</span>
+          </div>
+          <div class="experiment-visual">
+            <img src="/assets/overlays/comparison-worlds.png" alt="Hand-drawn treatment and control worlds with a difference ring between them">
+            <div class="experiment-label experiment-label--treatment"><i></i><span>Treatment</span></div>
+            <div class="experiment-label experiment-label--control"><i></i><span>Control</span></div>
+            <div class="delta-readout"><span>Δ observed</span><strong id="deltaCount">0</strong><small>state keys</small></div>
+          </div>
+          <p id="experimentSummary" class="panel-caption">No branch selected. Choose a candidate to inspect its causal difference.</p>
+        </section>
 
-function detailHtml(b, pred) {
-  const v = b.verdict;
-  const rows = v ? Object.entries(v.observed || {}) : [];
+        <section class="workspace-grid">
+          <div class="branch-column paper-panel" id="dashBranches">
+            <div class="panel-heading panel-heading--compact">
+              <div>
+                <p class="eyebrow">Counterfactual branches</p>
+                <h2>Candidates</h2>
+              </div>
+              <strong id="branchCount">0</strong>
+            </div>
+            <div id="branchList" class="branch-list" role="list"></div>
+          </div>
 
-  const predRows = b.prediction
-    ? Object.entries(b.prediction.effects).map(([k, want]) => {
-        const got = v?.observed?.[k];
-        const ok = got !== undefined;
-        return `<tr><td class="k">${esc(k)}</td><td>${esc(want)}</td>
-                <td class="${ok ? 'ok' : 'no'}">${esc(got ?? 'no change')}</td></tr>`;
-      }).join('')
-    : '';
+          <div class="inspector-column paper-panel" aria-live="polite">
+            <div class="panel-heading panel-heading--compact">
+              <div>
+                <p class="eyebrow">Engine evidence</p>
+                <h2 id="inspectorTitle">No branch selected</h2>
+              </div>
+              <span id="inspectorVerdict" class="verdict-pill">pending</span>
+            </div>
+            <div id="inspectorBody" class="inspector-body">
+              <p class="empty-note">When a branch reports, its treatment/control differences appear here.</p>
+            </div>
+          </div>
+        </section>
 
-  return `
-    <div class="detail">
-      <h2 class="section" style="margin-top:0">${esc(b.id)} — what the engine observed</h2>
-      ${v?.inert ? '<div class="inert">Treatment and control produced identical state. Whatever this patch does, the interaction did not cause it.</div>' : ''}
-      ${rows.length ? `<table><tr><th>state key</th><th>control &rarr; treatment</th></tr>
-        ${rows.map(([k, val]) => `<tr><td class="k">${esc(k)}</td><td>${esc(val)}</td></tr>`).join('')}</table>`
-        : (v ? '' : '<div class="empty">Not verified yet.</div>')}
+        <section class="integrity-board paper-panel" id="dashIntegrity">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Proof, not a badge</p>
+              <h2>Integrity checks</h2>
+            </div>
+            <span id="integrityScore" class="integrity-score">0/3 holding</span>
+          </div>
+          <img class="integrity-art" src="/assets/overlays/integrity-emblems.png" alt="Three hand-drawn integrity emblems">
+          <div class="integrity-grid">
+            <article><span id="branchIntegrityMark" class="check-mark">○</span><h3>Independent branches</h3><p id="branchIntegrityText">Waiting for candidates.</p></article>
+            <article><span id="worldIntegrityMark" class="check-mark">○</span><h3>Matched worlds</h3><p id="worldIntegrityText">Treatment and controls share one checkpoint.</p></article>
+            <article><span id="regressionIntegrityMark" class="check-mark">○</span><h3>Stable regression</h3><p id="regressionIntegrityText">Waiting for repeated realizations.</p></article>
+          </div>
+        </section>
 
-      ${b.prediction ? `<h2 class="section">Predicted vs observed</h2>
-        <table><tr><th>key</th><th>agent predicted</th><th>engine observed</th></tr>${predRows}</table>
-        ${pred?.wrong?.length ? `<div class="chips">${pred.wrong.map(w => `<span class="chip bad">${esc(w)}</span>`).join('')}</div>` : ''}` : ''}
+        <section class="timeline-board paper-panel" id="dashTimeline">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Run record</p><h2>Timeline</h2></div>
+            <span id="engineRuns" class="drafting-chip">0 engine runs</span>
+          </div>
+          <ol id="timeline" class="timeline"></ol>
+        </section>
+      </main>
+    </div>
+  </section>
 
-      ${b.patchLuau ? `<h2 class="section">Patch</h2><pre>${esc(b.patchLuau.trim())}</pre>` : ''}
-    </div>`;
-}
-
-function select(id) { selected = selected === id ? null : id; poll(); }
-
-async function decide(id, status) {
-  await fetch('/api/approvals/' + encodeURIComponent(id), {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ status }),
-  });
-  poll();
-}
-
-async function poll() {
-  try {
-    const s = await (await fetch('/api/state')).json();
-    render(s);
-  } catch (e) { /* server restarting; next tick retries */ }
-}
-
-poll();
-setInterval(poll, 700);
-</script>
+  <div id="viewTransition" class="view-transition" hidden aria-hidden="true">
+    <video muted playsinline preload="auto" poster="/assets/stills/zone-integrity-core.png">
+      <source src="/assets/videos/core-to-dashboard.mp4" type="video/mp4">
+    </video>
+    <p>field notes becoming instrument</p>
+  </div>
 </body>
 </html>

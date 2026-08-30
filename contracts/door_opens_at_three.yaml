@@ -11,15 +11,18 @@ requirement: >-
 # deferred, so without a yield all three fires queue up and the handlers run
 # only after the loop has already replaced the coins — the mechanic then sees
 # one coin, awards once, and the door never reaches its threshold.
+#
+# The replacement coin is built with the same kit constructor and the same
+# coordinates as the one the task's setup placed, so coin two and coin three are
+# the same object as coin one in every respect a player or the verifier can see.
+# The control below replaces it identically; the two conditions differ in how
+# many times the signal fires and in nothing else.
 treatment: |
   for _ = 1, 3 do
     sandbox.Collect:Fire("P1")
     task.wait()
     if not sandbox:FindFirstChild("Coin") then
-      local fresh = Instance.new("Part")
-      fresh.Name = "Coin"
-      fresh.Anchored = true
-      fresh.Parent = sandbox
+      kit.coin(sandbox, 0, 4, 24, "Coin")
     end
   end
 
@@ -33,10 +36,7 @@ controls:
         sandbox.Collect:Fire("P1")
         task.wait()
         if not sandbox:FindFirstChild("Coin") then
-          local fresh = Instance.new("Part")
-          fresh.Name = "Coin"
-          fresh.Anchored = true
-          fresh.Parent = sandbox
+          kit.coin(sandbox, 0, 4, 24, "Coin")
         end
       end
 
