@@ -78,12 +78,25 @@ async function main(): Promise<void> {
   // once.
   const install = accepted.slice(-1);
 
+  // Which world to install into. Studio is one shared instance, and the
+  // verifier destroys and rebuilds `PlaceboSandbox` on every condition, so a
+  // scratch root is the only way to install and then prove without racing it.
+  const root = process.env.PLACEBO_ROOT ?? 'PlaceboSandbox';
+
   const session = new StudioSession();
   await session.connect();
-  const raw = await session.luau(playableLuau({ mechanic: install.join('\n\n') }));
+  const raw = await session.luau(playableLuau({ root, mechanic: install.join('\n\n') }));
   await session.close();
 
   process.stdout.write(`\n  ${typeof raw === 'string' ? raw : JSON.stringify(raw)}\n`);
+
+  // The snapshot this just captured is the state every future Play session
+  // resets to, so it is worth reading rather than trusting. A world still
+  // holding a previous session's ending state shows up here as a non-zero
+  // score, and the fix is to re-run `npm run build:game` and install again.
+  const report = typeof raw === 'string' ? (JSON.parse(raw) as { state?: string }) : (raw as { state?: string });
+  if (report?.state) process.stdout.write(`\n  every Play resets to: ${report.state}\n`);
+
   process.stdout.write('\n  press Play in Studio and walk into a coin\n\n');
 }
 

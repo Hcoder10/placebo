@@ -181,6 +181,146 @@ export function luauLongString(value: string): string {
 }
 
 /**
+ * The world as it was built, kept so a second session can start from it.
+ *
+ * `RunService:Stop()` — and the Stop button — do not roll a run back. Whatever
+ * a session changed stays changed: the score sits at three, the door stays
+ * open, and the coin the mechanic destroyed is gone for good. Every session
+ * after the first therefore starts from the previous one's ending state, which
+ * is a game where collecting a coin moves a number nobody is watching and the
+ * door was already open before you got there. Measured, two runs back to back:
+ *
+ *   run 1   score 0 -> 3   door false -> true    (the mechanic, visible)
+ *   run 2   score 3 -> 6   door true  -> true    (nothing to see)
+ *
+ * So the built world is cloned into ServerStorage at install time and put back
+ * at the start of every session. ServerStorage rather than the sandbox because
+ * anything parented under Workspace renders, and a spare copy of the level
+ * sitting inside the level is worse than the bug.
+ *
+ * This restores; it does not decide. The values it writes are the ones the
+ * verifier's own build produced, so the play layer still adds no rule of its
+ * own — it returns the world to the state the contracts were proven against.
+ */
+export const PRISTINE_LUAU = `local pristine = (function()
+	local ServerStorage = game:GetService("ServerStorage")
+	local HttpService = game:GetService("HttpService")
+	local STORE = "PlaceboPristine"
+	-- Ties a snapshot to the world it was taken from. buildGame destroys and
+	-- rebuilds the sandbox, which drops this, so a snapshot left over from an
+	-- earlier build is recognisably not about the world now in front of it --
+	-- without which restoring would resurrect objects the new build removed.
+	local STAMP = "PlaceboPristineId"
+	local api = {}
+
+	function api.store()
+		return ServerStorage:FindFirstChild(STORE)
+	end
+
+	-- Things the play layer builds for itself, every session, from scratch.
+	-- They are not part of the world the verifier accepted and must never be
+	-- captured into the snapshot or left behind between sessions.
+	local function isPlayArtifact(inst)
+		return inst.Name == "Readout" or inst:IsA("ProximityPrompt")
+	end
+
+	function api.capture(sandbox)
+		local existing = api.store()
+		if existing then existing:Destroy() end
+		local folder = Instance.new("Folder")
+		folder.Name = STORE
+		for _, child in sandbox:GetChildren() do
+			-- The Scripts are reinstalled by kit.playable, so a copy of them
+			-- here would be a second, stale definition of the game.
+			if not child:IsA("LuaSourceContainer") then
+				local copy = child:Clone()
+				if copy then
+					for _, extra in copy:GetDescendants() do
+						if isPlayArtifact(extra) then extra:Destroy() end
+					end
+					copy.Parent = folder
+				end
+			end
+		end
+		local id = HttpService:GenerateGUID(false)
+		folder:SetAttribute(STAMP, id)
+		sandbox:SetAttribute(STAMP, id)
+		folder.Parent = ServerStorage
+		return #folder:GetChildren()
+	end
+
+	-- Whether the snapshot describes the world it is being asked to restore.
+	function api.matches(sandbox)
+		local folder = api.store()
+		if not folder then return false end
+		local id = folder:GetAttribute(STAMP)
+		return id ~= nil and id == sandbox:GetAttribute(STAMP)
+	end
+
+	-- Restores in place rather than by re-cloning, because an installed
+	-- mechanic captures \`sandbox.Scoreboard\` and \`sandbox.Door\` by reference
+	-- when it starts. Swapping those instances out from under it would leave it
+	-- writing to a copy that is no longer in the world.
+	function api.restore(sandbox)
+		local folder = api.store()
+		if not folder then return 0, 0 end
+		-- Refuses rather than guesses. Restoring a stale snapshot would put back
+		-- objects a later build deliberately does not have, and it would do it
+		-- silently, which is the worst version of this bug.
+		if not api.matches(sandbox) then return -1, -1 end
+		local returned, reset = 0, 0
+		for _, template in folder:GetChildren() do
+			local live = sandbox:FindFirstChild(template.Name)
+			if not live then
+				template:Clone().Parent = sandbox
+				returned += 1
+			else
+				for key in pairs(live:GetAttributes()) do live:SetAttribute(key, nil) end
+				for key, value in pairs(template:GetAttributes()) do live:SetAttribute(key, value) end
+				-- The properties the play layer's own output devices move. A
+				-- door left open is open in two places: the attribute the
+				-- mechanic set, and the CanCollide the readout applied.
+				if live:IsA("BasePart") and template:IsA("BasePart") then
+					live.CanCollide = template.CanCollide
+					live.Transparency = template.Transparency
+					live.Color = template.Color
+					live.Material = template.Material
+				end
+				reset += 1
+			end
+		end
+		-- Output devices are rebuilt every session, so last session's are
+		-- deleted rather than added to. Their connections died with the run
+		-- that made them: left in place, an old readout is a frozen number
+		-- sitting on top of the live one, and they stack one pair per session.
+		for _, inst in sandbox:GetDescendants() do
+			if isPlayArtifact(inst) then inst:Destroy() end
+		end
+		return returned, reset
+	end
+
+	-- The captured state, as the attributes a reader would check. Printed by
+	-- the installer so a snapshot taken from a mutated world says so out loud
+	-- ("Scoreboard.Coins=3") instead of quietly becoming the new normal.
+	function api.describe()
+		local folder = api.store()
+		if not folder then return "nothing captured" end
+		local parts = {}
+		for _, template in folder:GetChildren() do
+			for key, value in pairs(template:GetAttributes()) do
+				if key ~= "KitRole" then
+					table.insert(parts, template.Name .. "." .. key .. "=" .. tostring(value))
+				end
+			end
+		end
+		table.sort(parts)
+		return #parts > 0 and table.concat(parts, " ") or "no attributes"
+	end
+
+	return api
+end)()`;
+
+/**
  * The play layer: the input and output devices a verified mechanic has no way
  * to grow on its own.
  *
@@ -206,6 +346,8 @@ export const PLAY_SCRIPT_SOURCE = `-- Attached by kit.playable. Connects physica
 -- contracts fire and reacts to the same attributes the contracts observe, so
 -- the behaviour you play is the behaviour that was verified.
 local sandbox = script.Parent
+
+${PRISTINE_LUAU}
 
 -- A Touched handler fires many times per contact. The mechanics this drives are
 -- deliberately sensitive to repetition -- "missing_debounce" is one of the
@@ -281,6 +423,10 @@ end
 local function wireChest(part)
 	local use = event("Use")
 	if not use then return false end
+	-- Rebuilt from scratch each session, like every other output device here.
+	for _, existing in part:GetChildren() do
+		if existing:IsA("ProximityPrompt") then existing:Destroy() end
+	end
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Open"
 	prompt.ObjectText = part.Name
@@ -322,6 +468,13 @@ local function showChest(part)
 end
 
 local function showCount(part, attribute)
+	-- Last session's readouts, if the snapshot did not already clear them.
+	-- Their connections died with the run that made them, so leaving one in
+	-- place hangs a frozen number over the live one.
+	for _, existing in part:GetChildren() do
+		if existing.Name == "Readout" then existing:Destroy() end
+	end
+
 	-- Both faces, because which one the player approaches from is a property of
 	-- the level rather than of this script.
 	local labels = {}
@@ -370,6 +523,16 @@ local function attach(part)
 	if part:GetAttribute("Coins") ~= nil then showCount(part, "Coins") end
 end
 
+-- Before anything is wired, because the coin a previous session collected has
+-- to be back in the world for there to be a trigger to attach to at all.
+local returned, reset = pristine.restore(sandbox)
+if returned < 0 then
+	-- Said out loud, because the symptom otherwise is a game that quietly
+	-- starts from the last session's ending state and looks broken.
+	warn("[PlayLayer] the snapshot belongs to a different build of this world; run 'npm run playable' again to recapture it")
+	returned, reset = 0, 0
+end
+
 for _, descendant in sandbox:GetDescendants() do
 	if descendant:IsA("BasePart") then attach(descendant) end
 end
@@ -379,7 +542,7 @@ sandbox.DescendantAdded:Connect(function(descendant)
 	if descendant:IsA("BasePart") then task.defer(attach, descendant) end
 end)
 
-print("[PlayLayer] wired " .. tostring(wired) .. " trigger(s)")
+print(string.format("[PlayLayer] wired %d trigger(s); restored %d object(s), reset %d", wired, returned, reset))
 `;
 
 /** The palette, as the Luau table literal the kit closes over. */
@@ -722,6 +885,8 @@ if not sandbox then return HttpService:JSONEncode({ ok = false, reason = "no wor
 
 ${KIT_LUAU}
 
+${PRISTINE_LUAU}
+
 -- Two scripts, because a playable game needs two things the verifier keeps
 -- apart. PlayLayer is the input and output device. Mechanic is the patch the
 -- verifier accepted, installed verbatim: without it, pressing Play fires
@@ -760,12 +925,30 @@ function kit.playable(parent, mechanicSource)
 	return { play = play, mechanic = mechanic, counts = counts }
 end
 
+-- Restore first, then capture. Installing onto a world a previous session left
+-- mutated would otherwise snapshot that mutation as the state every future
+-- session resets to -- a "pristine" world with the score already at three.
+-- Restoring from the existing snapshot first makes re-running this idempotent;
+-- with no snapshot yet, the world is whatever the build just produced, which is
+-- the thing we want to capture.
+-- A refusal (-1) is the right answer here rather than a problem: it means the
+-- world was rebuilt since the last capture, so there is nothing to put back and
+-- the fresh capture below is the whole job.
+local returned, reset = pristine.restore(sandbox)
+if returned < 0 then returned, reset = 0, 0 end
+local captured = pristine.capture(sandbox)
+
 local attached = kit.playable(sandbox, ${mechanic})
 return HttpService:JSONEncode({
 	ok = true,
 	playBytes = #attached.play.Source,
 	mechanicBytes = attached.mechanic and #attached.mechanic.Source or 0,
 	counts = attached.counts,
+	-- Reported so a capture taken from a dirty world is visible rather than
+	-- silent: this is the state every future session will reset to.
+	captured = captured,
+	restored = returned + reset,
+	state = pristine.describe(),
 })`;
 }
 

@@ -1,0 +1,57 @@
+{
+  "model": "bytedance/seedance-2.0-mini",
+  "resolution": "720p",
+  "aspectRatio": "16:9",
+  "duration": 4,
+  "clips": [
+    {
+      "name": "zone-surface",
+      "firstFrame": "console/assets/stills/zone-surface.png",
+      "output": "console/assets/videos/zone-surface.mp4",
+      "prompt": "Locked straight-on composition on warm field-notebook paper. The hand-drawn tree crowns bend gently in a slow breeze traveling from left to right, then ease back. Fine branches flex with faint graphite ghost strokes. A very small number of leaves detach and drift lazily across the open space. The exposed roots make an almost imperceptible living expansion, while pencil hatching subtly redraws itself and paper fibers breathe. Preserve the exact restrained clay, mineral blue, pine, graphite, and bone palette. Keep the composition stable and calm. Do not add a camera move, cuts, zoom, words, letters, labels, symbols, buttons, panels, people, or new objects. Let the final composition settle naturally near the opening pose so the motion can repeat gently."
+    },
+    {
+      "name": "zone-branches",
+      "firstFrame": "console/assets/stills/zone-branches.png",
+      "output": "console/assets/videos/zone-branches.mp4",
+      "prompt": "Locked straight-on subterranean field-notebook illustration. From the central root junction, graphite root lines quietly extend outward along their existing paths as if being drawn by an invisible pencil. The restrained clay-red route and mineral-blue route carry a soft traveling pulse, each small circular junction appearing with a single imperfect ink stroke. A few soil motes drift downward and the cross-hatching gently shimmers through hand-redrawn line variation. Preserve every existing path and all negative space. No camera movement, cuts, zoom, words, letters, labels, symbols, buttons, panels, or new objects. The drawing relaxes back toward its original stillness for a gentle repeat."
+    },
+    {
+      "name": "zone-treatment-control",
+      "firstFrame": "console/assets/stills/zone-treatment-control.png",
+      "output": "console/assets/videos/zone-treatment-control.mp4",
+      "prompt": "Locked straight-on hand-drawn causal experiment beneath the earth. The clay-red and mineral-blue root paths pulse outward from their shared origin in quiet synchronization. A tiny abstract coin-like disc travels only along the clay treatment path, slips into the left block-world, and fades; the blue control path remains observably unchanged. The tiny worlds breathe with minute pencil redraws, their flags and sparse plants moving only a little. Fine soil particles drift through the large empty center without forming text or icons. Preserve the exact composition and palette. No camera move, cut, zoom, words, letters, labels, numbers, buttons, panels, or new objects. End in the same calm balanced state."
+    },
+    {
+      "name": "zone-causal-effect",
+      "firstFrame": "console/assets/stills/zone-causal-effect.png",
+      "output": "console/assets/videos/zone-causal-effect.mp4",
+      "prompt": "Locked straight-on pencil-and-watercolor matched-world basin. The two tiny block-worlds make tiny settling motions as their corresponding edges line up across the open center. Faint shared graphite fragments between them softly cancel into dust, while only a few restrained clay-red and mineral-blue differences remain visible for a moment before becoming quiet marks again. Pebble particles drift toward one another and dissolve at the midpoint. Geological contour hatching subtly redraws itself without changing the terrain. Preserve the expansive negative space and exact composition. No camera movement, cuts, zoom, words, letters, labels, equations, buttons, panels, people, or new objects. Return to the balanced opening stillness."
+    },
+    {
+      "name": "zone-regression",
+      "firstFrame": "console/assets/stills/zone-regression.png",
+      "output": "console/assets/videos/zone-regression.mp4",
+      "prompt": "Locked straight-on hand-drawn geological strata. The clay-red and mineral-blue layers glide toward one another by only a few millimeters and interlock like carefully matched histories, then breathe apart again. A small embedded coin-disc gives three restrained amber pulses while remaining anchored in the older layer. The simple door-shaped opening rises subtly from the newer upper layer and releases a faint warm glow, while all earlier layers remain undisturbed. Pencil hatching and paper grain gently live. No camera move, cut, zoom, words, letters, labels, numbers, buttons, panels, or new objects. Preserve the exact restrained palette and settle back into the original composition."
+    },
+    {
+      "name": "zone-integrity-core",
+      "firstFrame": "console/assets/stills/zone-integrity-core.png",
+      "output": "console/assets/videos/zone-integrity-core.mp4",
+      "prompt": "Locked centered earth-core illustration on warm bone paper. The three delicate orbit rings turn at different very slow speeds around the luminous geometric core. Tiny clay-red, mineral-blue, and amber nodes travel short distances and click into precise alignment. Root and geological contour lines draw a quiet inward breath toward the center. The core brightens in a restrained radial pulse and releases a few pencil-fine mineral motes that settle back into the drawing. Keep the feeling analytical, calm, and trustworthy. No camera movement, cuts, zoom, words, letters, labels, numbers, buttons, panels, people, or new objects. Let the rings settle near their opening alignment for a gentle repeat."
+    },
+    {
+      "name": "dashboard-ambient",
+      "firstFrame": "console/assets/stills/dashboard-ambient.png",
+      "output": "console/assets/videos/dashboard-ambient.mp4",
+      "prompt": "Locked straight-on quiet analytical instrument background on warm bone paper. The faint central radial drafting ring rotates almost imperceptibly while several sparse clay-red and mineral-blue data dots drift into exact positions on its geometry. The far-left hand-drawn root rail makes a slow living pulse from trunk into fine roots. Very pale contour and grid lines are subtly retraced by an invisible pencil, never becoming darker enough to compete with interface content. Preserve the generous empty field and exact composition. No camera move, cut, zoom, words, letters, labels, numbers, buttons, panels, cards, charts, or new objects. Return to the same quiet alignment."
+    },
+    {
+      "name": "core-to-dashboard",
+      "firstFrame": "console/assets/stills/zone-integrity-core.png",
+      "lastFrame": "console/assets/stills/dashboard-ambient.png",
+      "output": "console/assets/videos/core-to-dashboard.mp4",
+      "prompt": "One continuous locked-center hand-drawn transformation from the earth core into a precise operator instrument. The luminous core orbit rings expand outward and become the faint central dashboard radial grid. Curved geological contours gently unbend and straighten into pale drafting lines. A living root line travels toward the far left and resolves into the vertical dashboard root rail. Mineral motes settle into sparse clay-red and mineral-blue data points. The warm bone paper, graphite texture, and restrained palette remain perfectly continuous throughout. Make the transformation elegant, legible, and physical, with no camera cut, camera move, zoom, flash, words, letters, labels, numbers, buttons, panels, cards, charts, people, or newly invented objects. End exactly on the supplied dashboard background composition."
+    }
+  ]
+}
