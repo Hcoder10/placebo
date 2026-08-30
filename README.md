@@ -81,6 +81,21 @@ A launch test asks "did it run". A state assertion asks "is the number right". N
 
 Placebo asks it the way an experiment does. Build the world from nothing. Run the interaction in the treatment and not in the control. Snapshot both. The causal effect is the difference, and anything present in both is discarded no matter how correct it looks.
 
+### The gap the verifier exists to close
+
+Hand the model the world inventory the way the agent loop does, then ask what fraction of its completions actually connect to the interaction it was given:
+
+```
+gpt-oss-20b   build_coin    29/40
+              extend_door   29/39
+              repair_key    38/40
+              n=119   uses the given interface  80.7%   95% CI 72.7-86.8
+                      invents its own world      0.8%
+```
+
+So the model reaches for the right objects four times out of five. Roughly **one patch in thirty survives causal verification**.
+
+That distance is the entire argument. The failure is almost never "it ignored the world". It is code that connects to the right event, reads the right attribute, and still does not cause the effect the contract asks for: it awards before checking the coin exists, it awards on any signal rather than that one, it writes the value the test wants without the interaction being what wrote it. Those all look correct in review, and every one of them is rejected here by a control that produced the same state without the interaction.
 ## Why the harness is load bearing
 
 A causal test needs two arms that cannot contaminate each other. That is not a nice property, it is the whole experiment: if the branch that writes the treatment can see what the control did, the arms are correlated and the difference means nothing.
