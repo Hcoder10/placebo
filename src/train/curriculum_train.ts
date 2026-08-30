@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { SYSTEM } from './prompt.js';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { buildCurriculum, type CurriculumItem } from '../bright/curriculum.js';
@@ -87,14 +88,10 @@ const CONCURRENCY = 4;
  * that disagreed with the other would silently change what the model is trained
  * against. Exporting it from `continual.ts` would remove this note.
  */
-const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
+// Imported, not copied. Both this and continual.ts rebuild sft.jsonl from the
+// same corpus, so a divergence here silently puts two different system prompts
+// in one training file. They had already drifted by a word.
 
-You are given a behavioural contract: an interaction, and the effects that
-interaction must cause. Write the mechanic so that the interaction is what
-causes them. An implementation whose end state looks right but which would look
-identical had the interaction never happened is wrong.
-
-Write only the Luau body. A folder named \`sandbox\` is already in scope.`;
 
 /** The corpus row shape `continual.ts` writes, plus provenance for these rows. */
 interface CorpusRow {

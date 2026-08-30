@@ -1,4 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { SYSTEM } from './prompt.js';
 import { join } from 'node:path';
 import { evaluateTask, verifyBaseline, type TaskResult } from '../verifier/evaluateTask.js';
 import { StudioSession } from '../verifier/studio.js';
@@ -26,14 +27,10 @@ import { candidatesFor } from '../verifier/candidates.js';
 const ROOT = join(import.meta.dirname, '..', '..');
 const OUT = join(ROOT, 'data');
 
-const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
+// Imported, not copied. Both this and continual.ts rebuild sft.jsonl from the
+// same corpus, so a divergence here silently puts two different system prompts
+// in one training file. They had already drifted by a word.
 
-You are given a behavioural contract: an interaction, and the effects that
-interaction must cause. Write the mechanic so that the interaction is what
-causes them. A implementation whose end state looks right but which would look
-identical had the interaction never happened is wrong.
-
-Write only the Luau body. A folder named \`sandbox\` is already in scope.`;
 
 interface Example {
   taskId: string;
