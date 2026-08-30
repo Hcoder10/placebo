@@ -117,6 +117,21 @@ The 8 evaluation prompts were held out of the 197-prompt training corpus. A sepa
 | Independent review | Qodo found 8 bugs, all 8 real, all 8 fixed, **0 remaining** |
 | Tests | 122 unit, no Studio required |
 
+## It fits on one Spark
+
+The whole loop is local. Nothing is hosted, nothing is metered, and the only thing that leaves the machine is a scrape.
+
+| Piece | Needs |
+|---|---|
+| gpt-oss-20b, MXFP4, plus a LoRA | **13 GB** weights, measured |
+| DFlash drafter | **1.5 GB** |
+| KV cache at 16k context | the rest of the budget |
+| Roblox Studio, the engine | CPU, no GPU |
+| TrueForge, MCP server, console | CPU, a few hundred MB |
+
+A DGX Spark's **128 GB unified memory** holds the target, the drafter and a training run at the same time, which is the thing that makes the flywheel a loop rather than a schedule. Today those three fight over one workstation GPU: training the drafter meant stopping the server it was measured against, and a GPU fault mid-session blocked every new CUDA process for an hour. Unified memory removes the eviction, not just the cost.
+
+Measured throughput on a single Blackwell workstation GPU: **209 to 212 tok/s** generating Luau, at 16k context, with the LoRA attached.
 ## Where it runs
 
 Nothing hosted. Three pieces, all yours:
