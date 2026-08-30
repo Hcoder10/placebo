@@ -44,7 +44,7 @@ const SAMPLE_MODEL = process.env.PLACEBO_TARGET_MODEL ?? 'gpt-oss-20b';
 /** Draws per task per turn. Each one costs a full set of engine runs. */
 const SAMPLES_PER_TASK = Number(process.env.PLACEBO_SAMPLES ?? '12');
 
-const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
+export const SYSTEM = `You implement and repair Roblox game mechanics in Luau.
 
 You are given a behavioural contract: an interaction, and the effects that
 interaction must cause. Write the mechanic so that the interaction is what

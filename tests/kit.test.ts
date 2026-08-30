@@ -316,7 +316,9 @@ describe('the play layer', () => {
     // Anything parented under Workspace renders, so a spare copy of the level
     // inside the level would be worse than the bug it fixes.
     expect(PRISTINE_LUAU).toContain('game:GetService("ServerStorage")');
-    expect(PRISTINE_LUAU).toContain('folder.Parent = ServerStorage');
+    expect(PRISTINE_LUAU).toContain('folder.Parent = container()');
+    // One snapshot per world, or two installed worlds overwrite each other's.
+    expect(PRISTINE_LUAU).toContain('return container():FindFirstChild(sandbox.Name)');
   });
 
   it('never snapshots the scripts it is about to reinstall', () => {

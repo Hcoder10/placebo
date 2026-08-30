@@ -213,8 +213,24 @@ export const PRISTINE_LUAU = `local pristine = (function()
 	local STAMP = "PlaceboPristineId"
 	local api = {}
 
-	function api.store()
-		return ServerStorage:FindFirstChild(STORE)
+	-- One snapshot per world, keyed by the root's name. A single shared store
+	-- breaks as soon as two worlds are installed: observed live, two PlayLayers
+	-- started together and the log read
+	--   "restored 0 object(s), reset 0"   (refused -- the store described the other world)
+	--   "restored 0 object(s), reset 13"
+	-- because whichever was installed last had overwritten the other's snapshot.
+	local function container()
+		local folder = ServerStorage:FindFirstChild(STORE)
+		if not folder then
+			folder = Instance.new("Folder")
+			folder.Name = STORE
+			folder.Parent = ServerStorage
+		end
+		return folder
+	end
+
+	function api.store(sandbox)
+		return container():FindFirstChild(sandbox.Name)
 	end
 
 	-- Things the play layer builds for itself, every session, from scratch.
@@ -225,10 +241,10 @@ export const PRISTINE_LUAU = `local pristine = (function()
 	end
 
 	function api.capture(sandbox)
-		local existing = api.store()
+		local existing = api.store(sandbox)
 		if existing then existing:Destroy() end
 		local folder = Instance.new("Folder")
-		folder.Name = STORE
+		folder.Name = sandbox.Name
 		for _, child in sandbox:GetChildren() do
 			-- The Scripts are reinstalled by kit.playable, so a copy of them
 			-- here would be a second, stale definition of the game.
@@ -245,13 +261,13 @@ export const PRISTINE_LUAU = `local pristine = (function()
 		local id = HttpService:GenerateGUID(false)
 		folder:SetAttribute(STAMP, id)
 		sandbox:SetAttribute(STAMP, id)
-		folder.Parent = ServerStorage
+		folder.Parent = container()
 		return #folder:GetChildren()
 	end
 
 	-- Whether the snapshot describes the world it is being asked to restore.
 	function api.matches(sandbox)
-		local folder = api.store()
+		local folder = api.store(sandbox)
 		if not folder then return false end
 		local id = folder:GetAttribute(STAMP)
 		return id ~= nil and id == sandbox:GetAttribute(STAMP)
@@ -262,7 +278,7 @@ export const PRISTINE_LUAU = `local pristine = (function()
 	-- when it starts. Swapping those instances out from under it would leave it
 	-- writing to a copy that is no longer in the world.
 	function api.restore(sandbox)
-		local folder = api.store()
+		local folder = api.store(sandbox)
 		if not folder then return 0, 0 end
 		-- Refuses rather than guesses. Restoring a stale snapshot would put back
 		-- objects a later build deliberately does not have, and it would do it
@@ -302,8 +318,8 @@ export const PRISTINE_LUAU = `local pristine = (function()
 	-- The captured state, as the attributes a reader would check. Printed by
 	-- the installer so a snapshot taken from a mutated world says so out loud
 	-- ("Scoreboard.Coins=3") instead of quietly becoming the new normal.
-	function api.describe()
-		local folder = api.store()
+	function api.describe(sandbox)
+		local folder = api.store(sandbox)
 		if not folder then return "nothing captured" end
 		local parts = {}
 		for _, template in folder:GetChildren() do
@@ -948,7 +964,7 @@ return HttpService:JSONEncode({
 	-- silent: this is the state every future session will reset to.
 	captured = captured,
 	restored = returned + reset,
-	state = pristine.describe(),
+	state = pristine.describe(sandbox),
 })`;
 }
 
