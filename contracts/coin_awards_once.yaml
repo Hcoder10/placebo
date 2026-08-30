@@ -20,62 +20,313 @@ requirement: >-
 # contract in it shares one world, so the copies must stay in step.
 setup: |
   kit.scene()
-  kit.ground(sandbox, 120)
+  kit.ground(sandbox, 220, "Ground")
 
-  -- A winding ascent through a half-buried sun court. The route bends west,
-  -- crosses back through the garden, then climbs toward the shrine; every rise
-  -- is 1.5 studs or less and every gap is 4 studs or less.
-  kit.platform(sandbox, 0, 0, -22, 24, 16, "StartPlatform")
-  kit.tint(kit.platform(sandbox, -10, 1.5, -8, 12, 10, "WestLanding"), "clay")
-  kit.platform(sandbox, -5, 2.5, 3, 14, 10, "GardenTurn")
-  kit.tint(kit.platform(sandbox, 4, 3.5, 12, 10, 8, "Bridge"), "clay")
-  kit.platform(sandbox, 0, 4, 23, 18, 12, "Ledge")
-  kit.platform(sandbox, -19, 2.5, 6, 8, 8, "WestLookout")
-  kit.tint(kit.platform(sandbox, 17, 1.5, -3, 10, 10, "EastOutcrop"), "clay")
-  kit.spawn(sandbox, 0, 0, -23, "Spawn")
+  -- SUN CITADEL. An eleven-stage, fully continuous pilgrimage climbs fourteen
+  -- studs from the south gate to a skyline temple. Adjacent landings touch or
+  -- overlap in plan while their tops rise only 1-1.5 studs, so the route is
+  -- readable from above and comfortably walkable at JumpPower 50.
+  local route = {
+    { 0, 0, -82, 34, 20, "EntryPlaza", "sand" },
+    { 0, 1.5, -68, 24, 10, "PilgrimStep", "clay" },
+    { -7, 3, -57, 28, 14, "WestRamp", "sand" },
+    { -10, 4.5, -42, 34, 16, "WestCourt", "clay" },
+    { -3, 6, -27, 24, 14, "SunCauseway", "sand" },
+    { 0, 7.5, -10, 42, 20, "GreatSunCourt", "sand" },
+    { 0, 9, 6, 16, 14, "CanalBridge", "clay" },
+    { 7, 10.5, 19, 26, 14, "EastRise", "sand" },
+    { 7, 12, 33, 34, 14, "UpperCourt", "clay" },
+    { 0, 13, 49, 22, 18, "ShrineApproach", "sand" },
+    { 0, 14, 67, 40, 18, "FinalSanctum", "sand" },
+  }
+  for _, step in ipairs(route) do
+    kit.tint(kit.platform(sandbox, step[1], step[2], step[3], step[4], step[5], step[6]), step[7])
+  end
 
-  -- The spawn is a real threshold: score stones behind you, lanterns ahead,
-  -- and broken perimeter walls that reveal the route in layers.
-  local board = kit.tint(kit.wall(sandbox, -6.5, 0, -29.5, 7, "x", "Scoreboard"), "cream")
+  -- Raised side districts make the city feel explorable rather than like a
+  -- corridor. They also build a broad, asymmetric silhouette around the route.
+  local districts = {
+    { -43, 3, -70, 30, 24, "WestGarden", "clay" },
+    { 43, 4.5, -52, 32, 28, "EastBazaar", "sand" },
+    { -45, 7.5, -9, 34, 30, "MoonCourt", "sand" },
+    { 45, 9, 12, 30, 28, "EastReservoir", "clay" },
+    { -43, 10.5, 30, 32, 26, "ScholarRuins", "clay" },
+    { 43, 12, 46, 30, 24, "HighGarden", "sand" },
+    { -27, 14, 69, 14, 16, "WestTempleWing", "clay" },
+    { 27, 14, 69, 14, 16, "EastTempleWing", "clay" },
+  }
+  for _, district in ipairs(districts) do
+    kit.tint(kit.platform(sandbox, district[1], district[2], district[3], district[4], district[5], district[6]), district[7])
+  end
+
+  -- Six edge-to-edge bridges make the decorative districts genuinely
+  -- explorable. Each meets both shores without overlapping either platform.
+  local districtBridges = {
+    { -24.5, 3, -59, 7, 6, "WestGardenBridge" },
+    { 17, 4.5, -45, 20, 6, "EastBazaarBridge" },
+    { -24.5, 7.5, -13, 7, 6, "MoonCourtBridge" },
+    { 25, 9, 17, 10, 6, "ReservoirBridge" },
+    { -18.5, 10.5, 30, 17, 6, "ScholarBridge" },
+    { 26, 12, 40, 4, 6, "HighGardenBridge" },
+  }
+  for index, bridge in ipairs(districtBridges) do
+    kit.tint(kit.platform(sandbox, bridge[1], bridge[2], bridge[3], bridge[4], bridge[5], bridge[6]), index % 2 == 0 and "sand" or "clay")
+  end
+
+  -- Upper balconies sit on the surviving eight-stud ruin walls, giving every
+  -- district a second storey and breaking the otherwise uniform roofline.
+  local balconies = {
+    { -50, 11, -70, "WestGardenBalcony", "sand" },
+    { 51, 12.5, -52, "EastBazaarBalcony", "clay" },
+    { -54, 15.5, -9, "MoonCourtBalcony", "clay" },
+    { 53, 17, 12, "ReservoirBalcony", "sand" },
+    { -52, 18.5, 30, "ScholarBalcony", "sand" },
+    { 51, 20, 46, "HighGardenBalcony", "clay" },
+  }
+  for _, balcony in ipairs(balconies) do
+    kit.tint(kit.platform(sandbox, balcony[1], balcony[2], balcony[3], 12, 8, balcony[4]), balcony[5])
+    for _, offset in ipairs({ { -4, -2.5 }, { -4, 2.5 }, { 4, -2.5 }, { 4, 2.5 } }) do
+      kit.tint(kit.decor(sandbox, balcony[1] + offset[1], balcony[2], balcony[3] + offset[2], "pillar", balcony[4] .. "Column"), "cream")
+    end
+    kit.tint(kit.platform(sandbox, balcony[1], balcony[2] + 7, balcony[3], 12, 8, balcony[4] .. "Canopy"), "slate")
+  end
+
+  kit.spawn(sandbox, 0, 0, -82, "Spawn")
+
+  -- Twin score monoliths and four lit columns turn the spawn into a proper
+  -- threshold. The entire central axis beyond them is kept open, making the
+  -- distant gate towers visible the moment the player appears.
+  local board = kit.tint(kit.wall(sandbox, -10, 0, -91, 9, "x", "Scoreboard"), "cream")
   board:SetAttribute("Coins", 0)
-
-  local other = kit.tint(kit.wall(sandbox, 6.5, 0, -29.5, 7, "x", "OtherScoreboard"), "slate")
+  local other = kit.tint(kit.wall(sandbox, 10, 0, -91, 9, "x", "OtherScoreboard"), "slate")
   other:SetAttribute("Coins", 0)
 
-  kit.wall(sandbox, -12.5, 0, -22, 16, "z", "StartWallWest")
-  kit.wall(sandbox, 12.5, 0, -22, 16, "z", "StartWallEast")
-  kit.wall(sandbox, -25, 0, -5, 30, "z", "RuinWallWest")
-  kit.wall(sandbox, 25, 0, 5, 34, "z", "RuinWallEast")
-  kit.wall(sandbox, -16.5, 0, -8, 10, "z", "LandingWall")
+  for _, point in ipairs({ { -16, -88 }, { 16, -88 }, { -16, -76 }, { 16, -76 } }) do
+    local lantern = kit.tint(kit.decor(sandbox, point[1], 0, point[2], "pillar", "EntryLantern"), "cream")
+    kit.light(lantern, "gold", 1.8, 16)
+  end
 
-  local lanternWest = kit.tint(kit.decor(sandbox, -9, 0, -16.5, "pillar", "EntryLanternWest"), "cream")
-  kit.light(lanternWest, "gold", 1.4, 12)
-  local lanternEast = kit.tint(kit.decor(sandbox, 9, 0, -16.5, "pillar", "EntryLanternEast"), "cream")
-  kit.light(lanternEast, "gold", 1.4, 12)
+  -- A broken 184-by-176-stud perimeter encloses the city without turning it
+  -- into a box. Regular gaps reveal the landscape and create long shadows.
+  for _, side in ipairs({ -92, 92 }) do
+    for z = -72, 68, 28 do
+      kit.wall(sandbox, side, 0, z, 22, "z", "OuterRampart")
+    end
+  end
+  for _, z in ipairs({ -96, 88 }) do
+    for x = -70, 70, 28 do
+      kit.wall(sandbox, x, 0, z, 22, "x", "OuterRampart")
+    end
+  end
 
-  -- Plants occur in colonies, not as isolated props. The denser clusters sit
-  -- outside the route, while crystals mark its turns like blue trail lights.
-  kit.decor(sandbox, -20, 0, -26, "bush", "BushWestA")
-  kit.decor(sandbox, -16.5, 0, -27, "bush", "BushWestB")
-  kit.decor(sandbox, -22, 0, -22.5, "bush", "BushWestC")
-  kit.decor(sandbox, 19, 0, -16, "bush", "BushEastA")
-  kit.decor(sandbox, 22.5, 0, -13.5, "bush", "BushEastB")
-  kit.decor(sandbox, 18.5, 0, -11.5, "bush", "BushEastC")
-  kit.decor(sandbox, -13.5, 1.5, -10.5, "crystal", "TrailCrystalWest")
-  kit.decor(sandbox, 0, 2.5, 4, "crystal", "TrailCrystalTurn")
+  -- Retaining walls follow the pilgrimage at a respectful distance. Short,
+  -- staggered runs preserve sightlines and make each elevation feel supported.
+  local routeWalls = {
+    { -18, 0, -82, 18, "z" }, { 18, 0, -82, 18, "z" },
+    { -15, 1.5, -67, 8, "z" }, { 15, 1.5, -67, 8, "z" },
+    { -28, 4.5, -42, 14, "z" }, { 8, 4.5, -42, 14, "z" },
+    { -22, 7.5, -10, 16, "z" }, { 22, 7.5, -10, 16, "z" },
+    { -9, 9, 6, 10, "z" }, { 9, 9, 6, 10, "z" },
+    { -11, 12, 33, 12, "z" }, { 25, 12, 33, 12, "z" },
+    { -12, 13, 49, 16, "z" }, { 12, 13, 49, 16, "z" },
+  }
+  for index, wall in ipairs(routeWalls) do
+    local pilgrimWall = kit.wall(sandbox, wall[1], wall[2], wall[3], wall[4], wall[5], "PilgrimWall" .. index)
+    kit.tint(pilgrimWall, index % 4 == 0 and "clay" or "sand")
+  end
 
-  -- The side walls narrow the final terrace and the paired pillars frame the
-  -- gold pickup against the sky. It remains at standing height: walk into it.
-  kit.wall(sandbox, -9.5, 4, 23, 12, "z", "ShrineWallWest")
-  kit.wall(sandbox, 9.5, 4, 23, 12, "z", "ShrineWallEast")
-  kit.decor(sandbox, -5, 4, 27.5, "pillar", "ShrinePillarWest")
-  kit.decor(sandbox, 5, 4, 27.5, "pillar", "ShrinePillarEast")
-  kit.decor(sandbox, -6.5, 4, 20, "crystal", "ShrineCrystalWest")
-  kit.decor(sandbox, 6.5, 4, 20, "crystal", "ShrineCrystalEast")
-  kit.decor(sandbox, -6.5, 4, 25, "bush", "ShrineBushWest")
-  kit.decor(sandbox, 6.5, 4, 25, "bush", "ShrineBushEast")
+  -- Each side district is a partial ruin: three surviving edges, an open side
+  -- toward the central road, and internal columns that hint at lost roofs.
+  local districtWalls = {
+    { -58, 3, -70, 18, "z" }, { -43, 3, -82.5, 22, "x" }, { -43, 3, -57.5, 22, "x" },
+    { 60, 4.5, -52, 22, "z" }, { 44, 4.5, -66.5, 24, "x" }, { 44, 4.5, -37.5, 24, "x" },
+    { -63, 7.5, -9, 24, "z" }, { -46, 7.5, -24.5, 26, "x" }, { -46, 7.5, 6.5, 26, "x" },
+    { 61, 9, 12, 22, "z" }, { 46, 9, -2.5, 22, "x" }, { 46, 9, 26.5, 22, "x" },
+    { -60, 10.5, 30, 20, "z" }, { -44, 10.5, 16.5, 24, "x" }, { -44, 10.5, 43.5, 24, "x" },
+    { 59, 12, 46, 18, "z" }, { 44, 12, 33.5, 22, "x" }, { 44, 12, 58.5, 22, "x" },
+  }
+  for index, wall in ipairs(districtWalls) do
+    local districtWall = kit.wall(sandbox, wall[1], wall[2], wall[3], wall[4], wall[5], "DistrictRuin" .. index)
+    kit.tint(districtWall, index % 3 == 0 and "slate" or "clay")
+  end
 
-  kit.coin(sandbox, 0, 4, 24, "Coin")
+  -- The Ember Canal cuts across the full city. Six separated neon pools and
+  -- the narrow raised bridge create a crisp danger line without blocking the
+  -- mandatory route.
+  for _, x in ipairs({ -78, -58, -38, 38, 58, 78 }) do
+    kit.hazard(sandbox, x, 0, 6, 16, 6, "EmberCanal")
+  end
+  for _, x in ipairs({ -25, 25 }) do
+    kit.hazard(sandbox, x, 0, 6, 12, 6, "EmberCanalInner")
+  end
+
+  -- Colonnades repeat along three scales: monumental at the entry, civic in
+  -- the middle city, and close-set near the shrine. Lit capitals establish a
+  -- warm rhythm leading directly to the cool teal gate.
+  local colonnades = {
+    { -27, 27, -82, -46, 9, 0 },
+    { -26, 26, -28, 22, 10, 6 },
+    { -19, 19, 25, 51, 8, 12 },
+  }
+  for group, row in ipairs(colonnades) do
+    for _, x in ipairs({ row[1], row[2] }) do
+      for z = row[3], row[4], row[5] do
+        local pillar = kit.decor(sandbox, x, row[6], z, "pillar", "ProcessionalColumn" .. group)
+        if z == row[3] or z == row[4] then
+          kit.tint(pillar, "cream")
+          kit.light(pillar, "gold", 1.2, 13)
+        end
+      end
+    end
+  end
+
+  -- Twelve five-plant colonies soften the outskirts. Repeated offsets make
+  -- them read as intentional groves rather than random green marbles.
+  local groveCentres = {
+    { -74, -76 }, { 70, -73 }, { -74, -38 }, { 74, -34 },
+    { -76, 24 }, { 75, 30 }, { -72, 66 }, { 70, 68 },
+    { -42, -91 }, { 43, -88 }, { -60, 80 }, { 60, 80 },
+  }
+  local groveOffsets = { { 0, 0 }, { 4, 1 }, { -3, 3 }, { 2, 5 }, { -5, -2 } }
+  for grove, centre in ipairs(groveCentres) do
+    for plant, offset in ipairs(groveOffsets) do
+      kit.decor(sandbox, centre[1] + offset[1], 0, centre[2] + offset[2], "bush", "CitadelGrove" .. grove .. "Plant" .. plant)
+    end
+  end
+
+  -- Dense roof gardens put foliage where it is visible from the overview and
+  -- contrast the hard civic axis with softer, inhabited side spaces.
+  local roofGardens = {
+    { -48, 3, -72 }, { -43, 3, -67 }, { -38, 3, -72 },
+    { 38, 4.5, -55 }, { 44, 4.5, -48 }, { 50, 4.5, -56 },
+    { -51, 7.5, -14 }, { -44, 7.5, -6 }, { -37, 7.5, -14 },
+    { 39, 9, 7 }, { 45, 9, 17 }, { 51, 9, 7 },
+    { -50, 10.5, 25 }, { -43, 10.5, 35 }, { -36, 10.5, 25 },
+    { 38, 12, 42 }, { 44, 12, 51 }, { 50, 12, 42 },
+  }
+  for index, plant in ipairs(roofGardens) do
+    kit.decor(sandbox, plant[1], plant[2], plant[3], "bush", "RoofGarden" .. index)
+  end
+
+  -- Teal crystals work as trail markers at every turn and as cool pools of
+  -- light in the side districts. Their spacing makes the intended route easy
+  -- to read even at the scale of the whole city.
+  local crystals = {
+    { -12, 0, -74 }, { -19, 3, -54 }, { -12, 6, -25 }, { -6, 9, 7 },
+    { -7, 12, 34 }, { 8, 13, 49 }, { -15, 14, 62 }, { 15, 14, 62 },
+  }
+  for index, crystal in ipairs(crystals) do
+    kit.decor(sandbox, crystal[1], crystal[2], crystal[3], "crystal", "WayfinderCrystal" .. index)
+  end
+
+  -- Gold is the reward language. These individually named pickups draw one
+  -- continuous line from the threshold, through every rise, and into the side
+  -- rooms. The original required Coin remains alone at the final terrace.
+  kit.coin(sandbox, 0, 0, -78, "CoinSouthGate")
+  kit.coin(sandbox, 0, 1.5, -68, "CoinPilgrimStep")
+  kit.coin(sandbox, -7, 3, -57, "CoinWestRamp")
+  kit.coin(sandbox, -12, 4.5, -46, "CoinWestCourtA")
+  kit.coin(sandbox, -7, 4.5, -38, "CoinWestCourtB")
+  kit.coin(sandbox, -3, 6, -28, "CoinSunCauseway")
+  kit.coin(sandbox, -8, 7.5, -14, "CoinGreatCourtWest")
+  kit.coin(sandbox, 0, 7.5, -9, "CoinGreatCourtCentre")
+  kit.coin(sandbox, 0, 9, 6, "CoinCanalBridge")
+  kit.coin(sandbox, 7, 10.5, 18, "CoinEastRise")
+  kit.coin(sandbox, 5, 12, 30, "CoinUpperCourtA")
+  kit.coin(sandbox, 9, 12, 36, "CoinUpperCourtB")
+  kit.coin(sandbox, 0, 13, 49, "CoinShrineApproach")
+  kit.coin(sandbox, -7, 14, 61, "CoinSanctumWest")
+  kit.coin(sandbox, 7, 14, 61, "CoinSanctumEast")
+  kit.coin(sandbox, -43, 3, -70, "CoinWestGarden")
+  kit.coin(sandbox, 43, 4.5, -52, "CoinEastBazaar")
+  kit.coin(sandbox, -45, 7.5, -9, "CoinMoonCourt")
+  kit.coin(sandbox, 45, 9, 12, "CoinEastReservoir")
+  kit.coin(sandbox, -43, 10.5, 30, "CoinScholarRuins")
+  kit.coin(sandbox, 43, 12, 46, "CoinHighGarden")
+  kit.coin(sandbox, -27, 14, 69, "CoinWestTempleWing")
+  kit.coin(sandbox, 27, 14, 69, "CoinEastTempleWing")
+
+  -- The south threshold repeats the shrine's twin-tower silhouette at half
+  -- scale. Players see the final crown through this first crown at spawn.
+  kit.tint(kit.wall(sandbox, -27, 0, -82, 12, "x", "SouthGateWestLower"), "slate")
+  kit.tint(kit.wall(sandbox, -27, 8, -82, 12, "x", "SouthGateWestMiddle"), "sand")
+  kit.tint(kit.wall(sandbox, -33.5, 0, -78, 8, "z", "SouthGateWestReturn"), "slate")
+  kit.tint(kit.platform(sandbox, -27, 17, -82, 14, 10, "SouthGateWestCrown"), "sand")
+  kit.tint(kit.wall(sandbox, -27, 17, -82, 8, "x", "SouthGateWestUpper"), "slate")
+  kit.tint(kit.platform(sandbox, -27, 26, -82, 8, 6, "SouthGateWestCap"), "sand")
+  kit.tint(kit.decor(sandbox, -21, 0, -79, "pillar", "SouthGateWestSpine"), "cream")
+  local southWestBeacon = kit.tint(kit.decor(sandbox, -27, 26, -82, "crystal", "SouthGateWestBeacon"), "gold")
+  kit.light(southWestBeacon, "gold", 1.8, 18)
+
+  kit.tint(kit.wall(sandbox, 27, 0, -82, 12, "x", "SouthGateEastLower"), "slate")
+  kit.tint(kit.wall(sandbox, 27, 8, -82, 12, "x", "SouthGateEastMiddle"), "sand")
+  kit.tint(kit.wall(sandbox, 33.5, 0, -78, 8, "z", "SouthGateEastReturn"), "slate")
+  kit.tint(kit.platform(sandbox, 27, 17, -82, 14, 10, "SouthGateEastCrown"), "sand")
+  kit.tint(kit.wall(sandbox, 27, 17, -82, 8, "x", "SouthGateEastUpper"), "slate")
+  kit.tint(kit.platform(sandbox, 27, 26, -82, 8, 6, "SouthGateEastCap"), "sand")
+  kit.tint(kit.decor(sandbox, 21, 0, -79, "pillar", "SouthGateEastSpine"), "cream")
+  local southEastBeacon = kit.tint(kit.decor(sandbox, 27, 26, -82, "crystal", "SouthGateEastBeacon"), "gold")
+  kit.light(southEastBeacon, "gold", 1.8, 18)
+
+  -- A second, medium-height echo frames the canal crossing. Its open centre is
+  -- wider than the playable court, keeping the route and shrine sightline clear.
+  kit.tint(kit.wall(sandbox, -27, 7.5, -10, 10, "x", "CanalGateWestLower"), "slate")
+  kit.tint(kit.wall(sandbox, -27, 15.5, -10, 10, "x", "CanalGateWestMiddle"), "sand")
+  kit.tint(kit.wall(sandbox, -32.5, 7.5, -6, 8, "z", "CanalGateWestReturn"), "slate")
+  kit.tint(kit.platform(sandbox, -27, 24.5, -10, 12, 9, "CanalGateWestCrown"), "sand")
+  kit.tint(kit.wall(sandbox, -27, 24.5, -10, 7, "x", "CanalGateWestUpper"), "slate")
+  kit.tint(kit.platform(sandbox, -27, 33.5, -10, 7, 6, "CanalGateWestCap"), "sand")
+  kit.tint(kit.decor(sandbox, -22, 7.5, -7, "pillar", "CanalGateWestSpine"), "cream")
+  local canalWestBeacon = kit.tint(kit.decor(sandbox, -27, 33.5, -10, "crystal", "CanalGateWestBeacon"), "gold")
+  kit.light(canalWestBeacon, "gold", 1.6, 16)
+
+  kit.tint(kit.wall(sandbox, 27, 7.5, -10, 10, "x", "CanalGateEastLower"), "slate")
+  kit.tint(kit.wall(sandbox, 27, 15.5, -10, 10, "x", "CanalGateEastMiddle"), "sand")
+  kit.tint(kit.wall(sandbox, 32.5, 7.5, -6, 8, "z", "CanalGateEastReturn"), "slate")
+  kit.tint(kit.platform(sandbox, 27, 24.5, -10, 12, 9, "CanalGateEastCrown"), "sand")
+  kit.tint(kit.wall(sandbox, 27, 24.5, -10, 7, "x", "CanalGateEastUpper"), "slate")
+  kit.tint(kit.platform(sandbox, 27, 33.5, -10, 7, 6, "CanalGateEastCap"), "sand")
+  kit.tint(kit.decor(sandbox, 22, 7.5, -7, "pillar", "CanalGateEastSpine"), "cream")
+  local canalEastBeacon = kit.tint(kit.decor(sandbox, 27, 33.5, -10, "crystal", "CanalGateEastBeacon"), "gold")
+  kit.light(canalEastBeacon, "gold", 1.6, 16)
+
+  -- The final landmark: two thirty-two-stud slate towers, glowing foreground
+  -- pylons, and a stepped crown. It is tall enough to anchor the skyline from
+  -- spawn while leaving the central gate opening unmistakable.
+  for _, side in ipairs({ -1, 1 }) do
+    local towerX = side * 27
+    for level = 0, 2 do
+      kit.wall(sandbox, towerX, 14 + level * 8, 73, 14, "x", "GateTower")
+      kit.wall(sandbox, side * 34.5, 14 + level * 8, 69, 8, "z", "GateTowerReturn")
+    end
+    kit.platform(sandbox, towerX, 39, 71, 14, 10, "GateTowerCrown")
+    kit.wall(sandbox, towerX, 39, 73, 8, "x", "GateTowerUpper")
+    kit.platform(sandbox, towerX, 48, 73, 8, 6, "GateTowerCap")
+    for level = 0, 3 do
+      kit.decor(sandbox, side * 20, 14 + level * 6, 65, "pillar", "TowerSpine")
+    end
+    local beacon = kit.tint(kit.decor(sandbox, side * 27, 48, 73, "crystal", "CrownBeacon"), "gold")
+    kit.light(beacon, "gold", 2.4, 22)
+  end
+  kit.tint(kit.platform(sandbox, 0, 14, 80, 10, 8, "SunSpirePlinth"), "clay")
+  for level = 0, 4 do
+    kit.tint(kit.decor(sandbox, 0, 14 + level * 6, 82, "pillar", "SunSpire"), level == 4 and "gold" or "cream")
+  end
+  local spireBeacon = kit.tint(kit.decor(sandbox, 0, 44, 82, "crystal", "SunSpireBeacon"), "gold")
+  kit.light(spireBeacon, "gold", 2.8, 24)
+  kit.wall(sandbox, -15.5, 14, 76, 9, "x", "SanctumFaceWest")
+  kit.wall(sandbox, 15.5, 14, 76, 9, "x", "SanctumFaceEast")
+  for _, x in ipairs({ -14, -7, 7, 14 }) do
+    local sanctumColumn = kit.decor(sandbox, x, 14, 72, "pillar", "SanctumColumn")
+    if math.abs(x) == 7 then
+      kit.tint(sanctumColumn, "cream")
+      kit.light(sanctumColumn, "gold", 1.6, 15)
+    end
+  end
+
+  -- The required pickup floats at standing height in the centre of the final
+  -- terrace. A player simply follows the continuous road and walks into it.
+  kit.coin(sandbox, 0, 14, 67, "Coin")
 
   local collect = Instance.new("BindableEvent")
   collect.Name = "Collect"
